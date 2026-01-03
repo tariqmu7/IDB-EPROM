@@ -6,7 +6,7 @@ import { COLLECTIONS, ROLES, STATUS, DEFAULT_ADMIN, DEFAULT_KPIS, DEFAULT_FORM_F
 import { LoadingScreen, Button, Input, Card, Modal, StatCard, Badge } from './components/UI';
 import { IdeaCard } from './components/IdeaCard';
 import { callGemini, GOOGLE_SCRIPT_URL } from './services/gemini';
-import { Zap, LogOut, Briefcase, Activity, Clock, Users, Globe, Target, UserPlus, Pencil, Save, Trash2, Layout, Plus, X, Upload, FileCheck, Loader2, ChevronDown, AlertTriangle, Image as ImageIcon, CheckCircle, Link as LinkIcon, AlertCircle, Handshake, Lock, FileText } from 'lucide-react';
+import { Zap, LogOut, Briefcase, Activity, Clock, Users, Globe, Target, UserPlus, Pencil, Save, Trash2, Layout, Plus, X, Upload, FileCheck, Loader2, ChevronDown, AlertTriangle, Image as ImageIcon, CheckCircle, Link as LinkIcon, AlertCircle, Lock, FileText } from 'lucide-react';
 import { User, Idea } from './types';
 
 // --- Helpers ---
@@ -256,7 +256,7 @@ const CollaborationHub = ({ currentUser, ideas, onJoinTeam, onCollaborate, onEdi
        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-sm p-8 text-white shadow-md border-l-4 border-l-amber-500">
           <div className="flex items-center gap-6">
              <div className="p-4 bg-white/5 rounded-full backdrop-blur-sm border border-white/10">
-               <Handshake className="w-10 h-10 text-amber-500" />
+               <Users className="w-10 h-10 text-amber-500" />
              </div>
              <div>
                 <h2 className="text-2xl font-bold uppercase tracking-wide font-sans">Collaboration Matrix</h2>
@@ -709,9 +709,9 @@ const ManagerPortal = ({ currentUser, showToast }: any) => {
     };
 
     // Calculate Global Average
-    const entries = Object.values(newRatings);
+    const entries = Object.values(newRatings) as any[];
     const count = entries.length;
-    const avgPct = Math.round(entries.reduce((sum: number, r: any) => sum + (r.percentage || 0), 0) / (count || 1));
+    const avgPct = Math.round((entries.reduce((sum: number, r: any) => sum + (r.percentage || 0), 0) as number) / (count || 1));
     
     let grade = 'F';
     if (avgPct >= 80) grade = 'A';

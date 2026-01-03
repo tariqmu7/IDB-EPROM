@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, ReactNode } from 'react';
 import { 
   Briefcase, User, AlertTriangle, Link as LinkIcon, CheckCircle, 
   Copy, Pencil, Trash2, Globe, Share2, Printer, Loader2, Zap, 
-  BookOpen, Star, MessageSquare, Send, Handshake, Target
+  BookOpen, Star, MessageSquare, Send, Target, UserPlus
 } from 'lucide-react';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -64,7 +64,7 @@ const calculateAverageRating = (idea: any) => {
   return null;
 };
 
-const renderFormValue = (value: any): any => {
+const renderFormValue = (value: any): ReactNode => {
   if (value === null || value === undefined) return null;
   if (Array.isArray(value)) return value.join(', ');
   if (typeof value === 'object') return JSON.stringify(value);
@@ -252,7 +252,7 @@ export const IdeaCard = ({ idea, isManager, canApprove, onStatus, onComment, onU
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
-    const content = Object.entries(idea.formData).map(([k,v]) => `${k}: ${v}`).join('\n');
+    const content = Object.entries(idea.formData || {}).map(([k,v]) => `${k}: ${v}`).join('\n');
     const prompt = `Act as a Petroleum Engineering Consultant. Analyze this proposal titled "${idea.formTitle}". \n\nCONTENT:\n${content}\n\nPROVIDE:\n1. Executive Summary\n2. Operational Benefits (Efficiency/Cost)\n3. HSE Risk Analysis`;
     const analysis = await callGemini(prompt);
     await updateDoc(getDocRef(COLLECTIONS.IDEAS, idea.id), { aiSummary: analysis });
@@ -332,7 +332,7 @@ export const IdeaCard = ({ idea, isManager, canApprove, onStatus, onComment, onU
         
         <div className="flex-1">
            <div className="text-xs text-slate-500 font-medium line-clamp-3 leading-relaxed mb-4">
-              {Object.values(idea.formData).find(val => typeof val === 'string' && (val as string).length > 50) || "Click to view full proposal details..."}
+              {(Object.values(idea.formData || {}).find(val => typeof val === 'string' && (val as string).length > 50) as string) || "Click to view full proposal details..."}
            </div>
         </div>
 
@@ -425,7 +425,7 @@ export const IdeaCard = ({ idea, isManager, canApprove, onStatus, onComment, onU
                 
                 {onJoinTeam && !isOwner && !isCollaborator && (
                   <Button variant="secondary" onClick={() => onJoinTeam(idea.id)} className="h-9 text-xs">
-                    <Handshake className="w-4 h-4 mr-1.5" /> Join Team
+                    <UserPlus className="w-4 h-4 mr-1.5" /> Join Team
                   </Button>
                 )}
 
@@ -490,13 +490,13 @@ export const IdeaCard = ({ idea, isManager, canApprove, onStatus, onComment, onU
 
               <div className="space-y-6">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2">Proposal Details</h4>
-                {Object.entries(idea.formData).map(([k, v]) => (
+                {Object.entries(idea.formData || {}).map(([k, v]: [string, any]) => (
                   <div key={k} className="group">
                     <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                       <div className="w-1 h-1 bg-sky-500 rounded-full"></div> {String(k)}
                     </span>
                     <div className="text-sm text-slate-900 leading-7 whitespace-pre-wrap bg-white p-4 rounded-sm border border-slate-200 shadow-sm font-medium">
-                       {renderFormValue(v as any)}
+                       {renderFormValue(v)}
                     </div>
                   </div>
                 ))}
