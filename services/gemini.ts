@@ -5,7 +5,10 @@ export const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywVx7
 
 export const callGemini = async (prompt: string): Promise<string | null> => {
   try {
+    // FIX: Use process.env.API_KEY as required by GenAI SDK guidelines.
+    // Ensure the environment variable is configured.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
