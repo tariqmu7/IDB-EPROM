@@ -1,4 +1,5 @@
 import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
 import { HashRouter, Routes, Route, Navigate, Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as db from './services/storageService';
 import * as aiService from './services/aiService';
@@ -87,7 +88,7 @@ const Navbar = () => {
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
-      setSearchTerm(''); 
+      setSearchTerm(''); // Optional: clear after search
     }
   };
 
@@ -191,6 +192,7 @@ const AIChat = () => {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setIsLoading(true);
 
+    // Convert local messages to Gemini Content format
     const history: Content[] = messages.map(m => ({
       role: m.role,
       parts: [{ text: m.text }]
@@ -200,6 +202,7 @@ const AIChat = () => {
 
     let finalText = response.text || "I'm having trouble thinking right now.";
     
+    // Append grounding info if available
     if (response.groundingMetadata?.groundingChunks) {
       const links = response.groundingMetadata.groundingChunks
         .map((chunk: any) => chunk.web?.uri ? `[${chunk.web.title || 'Source'}](${chunk.web.uri})` : null)
@@ -218,6 +221,7 @@ const AIChat = () => {
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-50 group border border-slate-700"
       >
+        {/* Sparkles Icon */}
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 group-hover:animate-pulse text-eprom-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
         </svg>
@@ -227,6 +231,7 @@ const AIChat = () => {
 
   return (
     <div className="fixed bottom-6 right-6 w-[380px] h-[600px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 overflow-hidden font-sans fade-in">
+      {/* Header */}
       <div className="bg-slate-900 p-4 flex justify-between items-center text-white">
         <div className="flex items-center gap-2">
            <div className="w-2 h-2 rounded-full bg-eprom-accent animate-pulse"></div>
@@ -239,6 +244,7 @@ const AIChat = () => {
         </button>
       </div>
 
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
         {messages.length === 0 && (
           <div className="text-center text-slate-400 text-xs mt-10">
@@ -265,6 +271,7 @@ const AIChat = () => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Controls */}
       <div className="p-3 bg-white border-t border-slate-200">
         <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
           <button 
@@ -319,9 +326,12 @@ const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [settings, setSettings] = useState<AppSettings>(db.getSettings());
 
   const login = async (u: string, p: string) => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const loggedUser = db.loginUser(u, p);
-    setUser(loggedUser);
+    // Simulate async
+    return new Promise<void>((resolve) => {
+       const user = db.loginUser(u, p);
+       setUser(user);
+       resolve();
+    });
   };
 
   const logout = () => {
@@ -341,8 +351,10 @@ const AppProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+
 // --- Pages ---
 
+// 0. Search Page (Optimized)
 const SearchPage = () => {
     const [searchParams] = useSearchParams();
     const query = searchParams.get('q') || '';
@@ -420,6 +432,7 @@ const SearchPage = () => {
     );
 };
 
+// 1. Landing / Public Dashboard (Optimized)
 const LandingPage = () => {
   const [publishedIdeas, setPublishedIdeas] = useState<Idea[]>([]);
   const { user } = useAppContext();
@@ -461,6 +474,7 @@ const LandingPage = () => {
   }
 
   const copyShareLink = (id: string) => {
+      // Use pathname to ensure we include the repo name (e.g., /IDB-EPROM/) for GitHub Pages
       const baseUrl = window.location.href.split('#')[0];
       const url = `${baseUrl}#/view/${id}`;
       navigator.clipboard.writeText(url);
@@ -469,6 +483,7 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-eprom-bg text-slate-800 pt-16">
+      {/* Hero Area */}
       <div className="relative py-32 px-4 overflow-hidden border-b border-slate-200 bg-white">
         <div className="absolute inset-0 bg-luxury-gradient z-0"></div>
         
@@ -491,6 +506,7 @@ const LandingPage = () => {
         </div>
       </div>
 
+      {/* Published Ideas Grid */}
       <div className="max-w-7xl mx-auto px-4 py-20 relative z-10">
         <div className="flex items-center mb-12 border-l-4 border-slate-900 pl-6">
            <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">Top 10 Innovations</h2>
@@ -508,17 +524,21 @@ const LandingPage = () => {
                   className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500 cursor-pointer"
                   onClick={() => navigate(`/view/${idea.id}`)}
               >
+                 {/* Background Image Logic */}
                  {idea.coverImage && (
                     <div className="absolute inset-0 z-0 bg-slate-950">
                       <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-60" />
                     </div>
                  )}
+                 {/* Dark Overlay (Fade) */}
                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/90 to-transparent" />
 
+                 {/* Rank Badge */}
                  <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">
                     {index + 1}
                  </div>
 
+                 {/* Share Button */}
                  <div className="absolute top-5 right-5 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
                      <button 
                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyShareLink(idea.id); }} 
@@ -528,6 +548,7 @@ const LandingPage = () => {
                      </button>
                  </div>
 
+                 {/* Content Layer */}
                 <div className="absolute inset-0 z-10 p-8 flex flex-col justify-end transform transition-transform duration-300">
                   <div className="flex justify-between items-start mb-3 transform translate-y-2 group-hover:translate-y-0 transition-transform">
                     <Badge color="blue" className="bg-blue-500/20 text-blue-100 border-blue-500/30 backdrop-blur-md">{idea.category}</Badge>
@@ -553,6 +574,7 @@ const LandingPage = () => {
                        )}
                   </div>
 
+                  {/* Manager Only: AI Analysis Button */}
                   {user?.role === UserRole.MANAGER && (
                     <div className="mt-4">
                       <button 
@@ -566,6 +588,7 @@ const LandingPage = () => {
                   )}
                 </div>
                 
+                {/* Manager Analysis Overlay */}
                 {activeAnalysis === idea.id && (
                   <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-xl z-30 p-8 overflow-y-auto flex flex-col fade-in">
                      <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
@@ -617,6 +640,7 @@ const LandingPage = () => {
   );
 };
 
+// 2. Auth Page
 const AuthPage = () => {
   const { login, user } = useAppContext();
   const navigate = useNavigate();
@@ -675,6 +699,7 @@ const AuthPage = () => {
   );
 };
 
+// 3. Shared Idea Page
 const SharedIdeaPage = () => {
   const { id } = useParams();
   const [idea, setIdea] = useState<Idea | null>(null);
@@ -713,12 +738,14 @@ const SharedIdeaPage = () => {
   );
 };
 
+// 4. Collaboration Hub
 const CollaborationHub = () => {
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
     const navigate = useNavigate();
     
     useEffect(() => {
         const all = db.getIdeas();
+        // Filter ideas that are marked for collaboration
         setCollabIdeas(all.filter(i => 
              (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) && 
              (i.dynamicData['collab'] === true || (i as any).collaborationNeeded === true)
@@ -754,6 +781,7 @@ const CollaborationHub = () => {
     );
 };
 
+// 5. Idea Form Page (Refined)
 const IdeaFormPage = () => {
     const { user } = useAppContext();
     const navigate = useNavigate();
@@ -761,6 +789,7 @@ const IdeaFormPage = () => {
     const editingIdea = location.state?.idea as Idea | undefined;
     const parentIdea = location.state?.parentIdea as Idea | undefined;
 
+    // Core Data
     const [title, setTitle] = useState(editingIdea?.title || (parentIdea ? `Contribution: ${parentIdea.title}` : ''));
     const [description, setDescription] = useState(editingIdea?.description || '');
     const [category, setCategory] = useState(editingIdea?.category || 'Innovation');
@@ -768,6 +797,7 @@ const IdeaFormPage = () => {
     const [dynamicData, setDynamicData] = useState<Record<string, any>>(editingIdea?.dynamicData || {});
     const [coverImage, setCoverImage] = useState(editingIdea?.coverImage || '');
     
+    // Attachments
     const [attachments, setAttachments] = useState<string[]>(editingIdea?.attachments || []);
     const [isUploading, setIsUploading] = useState(false);
 
@@ -795,6 +825,7 @@ const IdeaFormPage = () => {
         if(isRecording) {
             const audioFile = await stopRecording();
             if(audioFile) {
+                // Insert indicator
                 setDescription(prev => prev + "\n[Processing Audio...]");
                 const text = await aiService.transcribeAudio(audioFile.base64, audioFile.mimeType);
                 setDescription(prev => prev.replace("\n[Processing Audio...]", "") + " " + text);
@@ -836,6 +867,7 @@ const IdeaFormPage = () => {
 
         const template = templates.find(t => t.id === templateId);
         
+        // Employee logic: if editing a rejected/revision item, resubmit it
         let status = editingIdea?.status || IdeaStatus.SUBMITTED;
         if (user.role === UserRole.EMPLOYEE && (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED || status === IdeaStatus.DRAFT)) {
             status = IdeaStatus.SUBMITTED;
@@ -874,13 +906,19 @@ const IdeaFormPage = () => {
             <div className="mb-8 border-b border-slate-200 pb-4 flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">{editingIdea ? 'Refine Protocol' : (parentIdea ? 'Collaborate on Protocol' : 'Initialize Protocol')}</h1>
-                    {parentIdea && <p className="text-blue-600 font-bold mt-1 text-sm flex items-center gap-2"><span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span> Contributing to: "{parentIdea.title}"</p>}
-                    {!parentIdea && <p className="text-slate-500 mt-1 text-sm font-medium">Submit new innovation for operational review.</p>}
+                    {parentIdea && (
+                        <div className="mt-2 flex items-center gap-2 p-2 bg-blue-50 border border-blue-100 rounded text-sm text-blue-700">
+                            <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                            <span>Contributing to: <strong>"{parentIdea.title}"</strong></span>
+                        </div>
+                    )}
+                    {!parentIdea && !editingIdea && <p className="text-slate-500 mt-1 text-sm font-medium">Submit new innovation for operational review.</p>}
                 </div>
                 <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs uppercase">Cancel</Button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Section 1: Essentials */}
                 <Card className="p-8 border-none shadow-lg">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">01 // Core Intelligence</h3>
                     
@@ -940,6 +978,7 @@ const IdeaFormPage = () => {
                     </div>
                 </Card>
 
+                {/* Section 2: Details */}
                 {currentTemplate && (
                     <Card className="p-8 border-none shadow-lg">
                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">02 // Specific Data</h3>
@@ -989,6 +1028,7 @@ const IdeaFormPage = () => {
                     </Card>
                 )}
 
+                {/* Section 3: Google Drive Attachments */}
                 <Card className="p-8 border-none shadow-lg">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">03 // Supporting Documents</h3>
                     
@@ -1036,12 +1076,17 @@ const IdeaFormPage = () => {
     );
 };
 
+// ... (Rest of file unchanged, AdminPanel, Dashboard, App, ProtectedRoute, exports)
+
 const AdminPanel = () => {
+    // ... (Keep existing AdminPanel)
     const { settings, refreshSettings } = useAppContext();
     const [users, setUsers] = useState<User[]>([]);
     const [templates, setTemplates] = useState<FormTemplate[]>([]);
     const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
+    // ... (Use same implementation as previous step)
     
+    // ... Admin Panel State ...
     const [newCat, setNewCat] = useState('');
     const [newDept, setNewDept] = useState('');
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
