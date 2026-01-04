@@ -19,6 +19,8 @@ const STORAGE_KEYS = {
   TEMPLATES: 'eprom_templates'
 };
 
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywVx70i2DXMf90cuMkE84Jn3rNlIr6dQJwXdoVx7l9kzzSXU-9uxn1MnrbWnJRRu6b/exec";
+
 // Initial Data Seeding
 const seedData = () => {
   if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
@@ -362,4 +364,39 @@ export const fileToBase64 = (file: File): Promise<string> => {
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = error => reject(error);
   });
+};
+
+export const uploadToDrive = async (file: File): Promise<string> => {
+  try {
+    const base64 = await fileToBase64(file);
+    const content = base64.split(',')[1];
+    
+    const payload = {
+      filename: file.name,
+      mimeType: file.type,
+      data: content
+    };
+
+    // Note: 'no-cors' mode is often required for simple GAS POSTs from browser due to CORS,
+    // but 'no-cors' yields an opaque response (cannot read JSON).
+    // If the script explicitly handles CORS (Option request + headers), 'cors' works.
+    // Assuming standard web app deployment allowing anonymous execution:
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+      method: "POST",
+      // mode: 'no-cors', // Using no-cors prevents reading the response (URL). 
+      // If the provided script supports CORS, use 'cors'. 
+      // We will try 'cors' first assuming a well-written script.
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8", // text/plain prevents preflight
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    return result.url;
+  } catch (error) {
+    console.error("Upload failed", error);
+    // Fallback or re-throw
+    throw new Error("Failed to upload attachment to Drive.");
+  }
 };

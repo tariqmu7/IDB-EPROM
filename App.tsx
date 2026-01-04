@@ -1,5 +1,4 @@
 import React, { useState, useEffect, createContext, useContext, useRef } from 'react';
-import { createRoot } from 'react-dom/client';
 import { HashRouter, Routes, Route, Navigate, Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import * as db from './services/storageService';
 import * as aiService from './services/aiService';
@@ -88,7 +87,7 @@ const Navbar = () => {
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
-      setSearchTerm(''); // Optional: clear after search
+      setSearchTerm(''); 
     }
   };
 
@@ -192,7 +191,6 @@ const AIChat = () => {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setIsLoading(true);
 
-    // Convert local messages to Gemini Content format
     const history: Content[] = messages.map(m => ({
       role: m.role,
       parts: [{ text: m.text }]
@@ -202,7 +200,6 @@ const AIChat = () => {
 
     let finalText = response.text || "I'm having trouble thinking right now.";
     
-    // Append grounding info if available
     if (response.groundingMetadata?.groundingChunks) {
       const links = response.groundingMetadata.groundingChunks
         .map((chunk: any) => chunk.web?.uri ? `[${chunk.web.title || 'Source'}](${chunk.web.uri})` : null)
@@ -221,7 +218,6 @@ const AIChat = () => {
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-50 group border border-slate-700"
       >
-        {/* Sparkles Icon */}
         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 group-hover:animate-pulse text-eprom-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
         </svg>
@@ -231,7 +227,6 @@ const AIChat = () => {
 
   return (
     <div className="fixed bottom-6 right-6 w-[380px] h-[600px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 overflow-hidden font-sans fade-in">
-      {/* Header */}
       <div className="bg-slate-900 p-4 flex justify-between items-center text-white">
         <div className="flex items-center gap-2">
            <div className="w-2 h-2 rounded-full bg-eprom-accent animate-pulse"></div>
@@ -244,7 +239,6 @@ const AIChat = () => {
         </button>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
         {messages.length === 0 && (
           <div className="text-center text-slate-400 text-xs mt-10">
@@ -271,7 +265,6 @@ const AIChat = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Controls */}
       <div className="p-3 bg-white border-t border-slate-200">
         <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar">
           <button 
@@ -319,10 +312,37 @@ const AIChat = () => {
   );
 };
 
+// --- AppProvider Implementation ---
+
+const AppProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(db.getCurrentUser());
+  const [settings, setSettings] = useState<AppSettings>(db.getSettings());
+
+  const login = async (u: string, p: string) => {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const loggedUser = db.loginUser(u, p);
+    setUser(loggedUser);
+  };
+
+  const logout = () => {
+    db.logoutUser();
+    setUser(null);
+  };
+
+  const refreshSettings = () => {
+    setSettings(db.getSettings());
+  };
+
+  return (
+    <AppContext.Provider value={{ user, settings, login, logout, refreshSettings }}>
+      {children}
+      <AIChat />
+    </AppContext.Provider>
+  );
+};
 
 // --- Pages ---
 
-// 0. Search Page (Optimized)
 const SearchPage = () => {
     const [searchParams] = useSearchParams();
     const query = searchParams.get('q') || '';
@@ -400,7 +420,6 @@ const SearchPage = () => {
     );
 };
 
-// 1. Landing / Public Dashboard (Optimized)
 const LandingPage = () => {
   const [publishedIdeas, setPublishedIdeas] = useState<Idea[]>([]);
   const { user } = useAppContext();
@@ -442,7 +461,6 @@ const LandingPage = () => {
   }
 
   const copyShareLink = (id: string) => {
-      // Use pathname to ensure we include the repo name (e.g., /IDB-EPROM/) for GitHub Pages
       const baseUrl = window.location.href.split('#')[0];
       const url = `${baseUrl}#/view/${id}`;
       navigator.clipboard.writeText(url);
@@ -451,7 +469,6 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-eprom-bg text-slate-800 pt-16">
-      {/* Hero Area */}
       <div className="relative py-32 px-4 overflow-hidden border-b border-slate-200 bg-white">
         <div className="absolute inset-0 bg-luxury-gradient z-0"></div>
         
@@ -474,7 +491,6 @@ const LandingPage = () => {
         </div>
       </div>
 
-      {/* Published Ideas Grid */}
       <div className="max-w-7xl mx-auto px-4 py-20 relative z-10">
         <div className="flex items-center mb-12 border-l-4 border-slate-900 pl-6">
            <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">Top 10 Innovations</h2>
@@ -492,21 +508,17 @@ const LandingPage = () => {
                   className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500 cursor-pointer"
                   onClick={() => navigate(`/view/${idea.id}`)}
               >
-                 {/* Background Image Logic */}
                  {idea.coverImage && (
                     <div className="absolute inset-0 z-0 bg-slate-950">
                       <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-60" />
                     </div>
                  )}
-                 {/* Dark Overlay (Fade) */}
                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/90 to-transparent" />
 
-                 {/* Rank Badge */}
                  <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">
                     {index + 1}
                  </div>
 
-                 {/* Share Button */}
                  <div className="absolute top-5 right-5 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
                      <button 
                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyShareLink(idea.id); }} 
@@ -516,7 +528,6 @@ const LandingPage = () => {
                      </button>
                  </div>
 
-                 {/* Content Layer */}
                 <div className="absolute inset-0 z-10 p-8 flex flex-col justify-end transform transition-transform duration-300">
                   <div className="flex justify-between items-start mb-3 transform translate-y-2 group-hover:translate-y-0 transition-transform">
                     <Badge color="blue" className="bg-blue-500/20 text-blue-100 border-blue-500/30 backdrop-blur-md">{idea.category}</Badge>
@@ -542,7 +553,6 @@ const LandingPage = () => {
                        )}
                   </div>
 
-                  {/* Manager Only: AI Analysis Button */}
                   {user?.role === UserRole.MANAGER && (
                     <div className="mt-4">
                       <button 
@@ -556,7 +566,6 @@ const LandingPage = () => {
                   )}
                 </div>
                 
-                {/* Manager Analysis Overlay */}
                 {activeAnalysis === idea.id && (
                   <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-xl z-30 p-8 overflow-y-auto flex flex-col fade-in">
                      <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
@@ -608,7 +617,6 @@ const LandingPage = () => {
   );
 };
 
-// 2. Auth Page
 const AuthPage = () => {
   const { login, user } = useAppContext();
   const navigate = useNavigate();
@@ -667,7 +675,6 @@ const AuthPage = () => {
   );
 };
 
-// 3. Shared Idea Page
 const SharedIdeaPage = () => {
   const { id } = useParams();
   const [idea, setIdea] = useState<Idea | null>(null);
@@ -706,13 +713,12 @@ const SharedIdeaPage = () => {
   );
 };
 
-// 4. Collaboration Hub
 const CollaborationHub = () => {
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
+    const navigate = useNavigate();
     
     useEffect(() => {
         const all = db.getIdeas();
-        // Filter ideas that are marked for collaboration
         setCollabIdeas(all.filter(i => 
              (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) && 
              (i.dynamicData['collab'] === true || (i as any).collaborationNeeded === true)
@@ -732,7 +738,13 @@ const CollaborationHub = () => {
                         <p className="text-sm text-slate-500 mb-4 line-clamp-3">{idea.description}</p>
                         <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
                             <span className="text-xs font-bold text-slate-400">{idea.authorName}</span>
-                            <Button variant="secondary" className="text-xs py-1 px-3">Contact Lead</Button>
+                            <Button 
+                                variant="secondary" 
+                                className="text-xs py-1 px-3"
+                                onClick={() => navigate('/submit', { state: { parentIdea: idea } })}
+                            >
+                                Collaborate
+                            </Button>
                         </div>
                     </Card>
                 ))}
@@ -742,27 +754,34 @@ const CollaborationHub = () => {
     );
 };
 
-// 5. Idea Form Page
 const IdeaFormPage = () => {
     const { user } = useAppContext();
     const navigate = useNavigate();
     const location = useLocation();
     const editingIdea = location.state?.idea as Idea | undefined;
+    const parentIdea = location.state?.parentIdea as Idea | undefined;
 
-    const [title, setTitle] = useState(editingIdea?.title || '');
+    const [title, setTitle] = useState(editingIdea?.title || (parentIdea ? `Contribution: ${parentIdea.title}` : ''));
     const [description, setDescription] = useState(editingIdea?.description || '');
-    const [category, setCategory] = useState(editingIdea?.category || '');
-    const [templateId, setTemplateId] = useState(editingIdea?.templateId || 'default-1'); // Default to first available usually
+    const [category, setCategory] = useState(editingIdea?.category || 'Innovation');
+    const [templateId, setTemplateId] = useState(editingIdea?.templateId || '');
     const [dynamicData, setDynamicData] = useState<Record<string, any>>(editingIdea?.dynamicData || {});
     const [coverImage, setCoverImage] = useState(editingIdea?.coverImage || '');
     
+    const [attachments, setAttachments] = useState<string[]>(editingIdea?.attachments || []);
+    const [isUploading, setIsUploading] = useState(false);
+
     const [templates, setTemplates] = useState<FormTemplate[]>([]);
     const { isRecording, startRecording, stopRecording } = useRecorder();
     const [isEnhancing, setIsEnhancing] = useState(false);
 
     useEffect(() => {
-        setTemplates(db.getTemplates());
-    }, []);
+        const t = db.getTemplates();
+        setTemplates(t);
+        if (!editingIdea && t.length > 0) {
+            setTemplateId(t[0].id);
+        }
+    }, [editingIdea]);
 
     const handleEnhance = async () => {
         if(!description) return;
@@ -776,9 +795,9 @@ const IdeaFormPage = () => {
         if(isRecording) {
             const audioFile = await stopRecording();
             if(audioFile) {
-                // Transcribe
+                setDescription(prev => prev + "\n[Processing Audio...]");
                 const text = await aiService.transcribeAudio(audioFile.base64, audioFile.mimeType);
-                if(text) setDescription(prev => prev + " " + text);
+                setDescription(prev => prev.replace("\n[Processing Audio...]", "") + " " + text);
             }
         } else {
             startRecording();
@@ -792,12 +811,36 @@ const IdeaFormPage = () => {
         }
     }
 
+    const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if(e.target.files?.[0]) {
+            setIsUploading(true);
+            try {
+                const url = await db.uploadToDrive(e.target.files[0]);
+                setAttachments(prev => [...prev, url]);
+                alert("File uploaded to Drive successfully!");
+            } catch (err) {
+                alert("Failed to upload file to Google Drive. Ensure the script is deployed correctly.");
+            } finally {
+                setIsUploading(false);
+            }
+        }
+    }
+
+    const removeAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!user) return;
 
         const template = templates.find(t => t.id === templateId);
         
+        let status = editingIdea?.status || IdeaStatus.SUBMITTED;
+        if (user.role === UserRole.EMPLOYEE && (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED || status === IdeaStatus.DRAFT)) {
+            status = IdeaStatus.SUBMITTED;
+        }
+
         const newIdea: Idea = {
             id: editingIdea?.id || Date.now().toString(),
             authorId: user.id,
@@ -811,11 +854,13 @@ const IdeaFormPage = () => {
             coverImage,
             templateId,
             templateName: template?.name || 'Unknown',
+            parentIdeaId: parentIdea?.id || editingIdea?.parentIdeaId,
             dynamicData,
             tags: [],
-            status: editingIdea?.status || IdeaStatus.DRAFT,
+            status: status,
             ratings: editingIdea?.ratings || [],
-            comments: editingIdea?.comments || []
+            comments: editingIdea?.comments || [],
+            attachments: attachments
         };
 
         db.saveIdea(newIdea);
@@ -825,695 +870,343 @@ const IdeaFormPage = () => {
     const currentTemplate = templates.find(t => t.id === templateId);
 
     return (
-        <div className="max-w-3xl mx-auto px-4 py-20">
-            <h1 className="text-3xl font-bold mb-8">{editingIdea ? 'Edit Innovation' : 'Submit New Innovation'}</h1>
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <Card className="p-6">
-                    <Input label="Title" value={title} onChange={e => setTitle(e.target.value)} required />
+        <div className="max-w-4xl mx-auto px-4 py-24 fade-in">
+            <div className="mb-8 border-b border-slate-200 pb-4 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">{editingIdea ? 'Refine Protocol' : (parentIdea ? 'Collaborate on Protocol' : 'Initialize Protocol')}</h1>
+                    {parentIdea && <p className="text-blue-600 font-bold mt-1 text-sm flex items-center gap-2"><span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span> Contributing to: "{parentIdea.title}"</p>}
+                    {!parentIdea && <p className="text-slate-500 mt-1 text-sm font-medium">Submit new innovation for operational review.</p>}
+                </div>
+                <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs uppercase">Cancel</Button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-8">
+                <Card className="p-8 border-none shadow-lg">
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">01 // Core Intelligence</h3>
                     
-                    <div className="relative">
-                        <Textarea label="Description" value={description} onChange={e => setDescription(e.target.value)} rows={6} required />
-                        <div className="absolute top-0 right-0 flex gap-2">
-                             <button type="button" onClick={handleEnhance} disabled={isEnhancing} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">
-                                {isEnhancing ? 'Enhancing...' : 'AI Enhance'}
-                             </button>
-                             <button type="button" onClick={handleAudioInput} className={`text-xs px-2 py-1 rounded ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-600'}`}>
-                                {isRecording ? 'Stop Recording' : 'Dictate'}
-                             </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <Input label="Protocol Title" value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Flare Gas Recovery" />
+                        <Select label="Category" options={db.getSettings().categories} value={category} onChange={e => setCategory(e.target.value)} required />
+                    </div>
+                    
+                    <div className="mb-6 relative">
+                        <div className="flex justify-between items-end mb-1.5">
+                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Technical Description</label>
+                             <div className="flex gap-2">
+                                <button type="button" onClick={handleEnhance} disabled={isEnhancing} className="text-[10px] font-bold uppercase text-indigo-500 hover:text-indigo-700 disabled:opacity-50 flex items-center gap-1">
+                                    {isEnhancing ? (
+                                        <span className="w-2 h-2 bg-indigo-500 rounded-full animate-ping"></span>
+                                    ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" /></svg>
+                                    )}
+                                    AI Enhance
+                                </button>
+                                <button type="button" onClick={handleAudioInput} className={`text-[10px] font-bold uppercase flex items-center gap-1 ${isRecording ? 'text-red-600 animate-pulse' : 'text-slate-400 hover:text-slate-900'}`}>
+                                    <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-600' : 'bg-slate-400'}`}></span>
+                                    {isRecording ? 'Stop Rec' : 'Dictate'}
+                                </button>
+                             </div>
                         </div>
+                        <textarea 
+                            className="w-full px-4 py-3 bg-slate-50/50 border border-slate-300 rounded text-slate-900 placeholder-slate-400 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all min-h-[160px] text-sm leading-relaxed"
+                            value={description}
+                            onChange={e => setDescription(e.target.value)}
+                            required
+                            placeholder="Describe the operational challenge and proposed solution..."
+                        />
                     </div>
 
-                    <Select label="Category" options={db.getSettings().categories} value={category} onChange={e => setCategory(e.target.value)} required />
-                    
-                    <div className="mb-5">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Cover Image</label>
-                        <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"/>
-                        {coverImage && <img src={coverImage} className="mt-4 h-32 object-cover rounded" />}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Visual Reference (Cover)</label>
+                        <div className="flex items-start gap-6">
+                            <label className="flex-shrink-0 cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-3 rounded text-xs font-bold uppercase transition-colors border border-slate-200 hover:border-slate-300 flex flex-col items-center justify-center w-32 h-32">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mb-2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <span>Select Img</span>
+                                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                            </label>
+                            {coverImage ? (
+                                <div className="h-32 w-full flex-1 overflow-hidden rounded border border-slate-200 bg-slate-50 relative group">
+                                    <img src={coverImage} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button type="button" onClick={() => setCoverImage('')} className="text-white text-xs uppercase font-bold">Remove</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-32 w-full flex-1 rounded border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-slate-400 text-xs">
+                                    No Image Selected
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </Card>
 
                 {currentTemplate && (
-                    <Card className="p-6">
-                        <h3 className="font-bold text-lg mb-4 text-slate-700">Detailed Information</h3>
-                        {currentTemplate.fields.map(field => (
-                            <div key={field.id} className="mb-4">
-                                {field.type === 'textarea' ? (
-                                    <Textarea 
-                                        label={field.label} 
-                                        required={field.required}
-                                        value={dynamicData[field.id] || ''}
-                                        onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
-                                    />
-                                ) : field.type === 'select' ? (
-                                    <Select 
-                                        label={field.label}
-                                        options={field.options || []}
-                                        required={field.required}
-                                        value={dynamicData[field.id] || ''}
-                                        onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
-                                    />
-                                ) : field.type === 'checkbox' ? (
-                                    <div className="flex items-center gap-2">
-                                        <input 
-                                            type="checkbox"
-                                            checked={!!dynamicData[field.id]}
-                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.checked})}
-                                            className="w-4 h-4 text-eprom-blue rounded border-gray-300 focus:ring-eprom-blue"
+                    <Card className="p-8 border-none shadow-lg">
+                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">02 // Specific Data</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {currentTemplate.fields.map((field) => (
+                                <div key={field.id} className={field.type === 'textarea' ? 'col-span-1 md:col-span-2' : ''}>
+                                    {field.type === 'textarea' ? (
+                                        <Textarea 
+                                            label={field.label} 
+                                            required={field.required}
+                                            value={dynamicData[field.id] || ''}
+                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
                                         />
-                                        <label className="text-sm font-medium text-slate-700">{field.label}</label>
-                                    </div>
-                                ) : (
-                                    <Input 
-                                        label={field.label}
-                                        type={field.type}
-                                        required={field.required}
-                                        value={dynamicData[field.id] || ''}
-                                        onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
-                                    />
-                                )}
-                            </div>
-                        ))}
+                                    ) : field.type === 'select' && field.options ? (
+                                        <Select 
+                                            label={field.label}
+                                            options={field.options}
+                                            required={field.required}
+                                            value={dynamicData[field.id] || ''}
+                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
+                                        />
+                                    ) : field.type === 'checkbox' ? (
+                                        <div className="flex items-center h-full pt-6">
+                                            <label className="flex items-center cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={!!dynamicData[field.id]} 
+                                                    onChange={(e) => setDynamicData({...dynamicData, [field.id]: e.target.checked})}
+                                                    className="form-checkbox h-5 w-5 text-eprom-blue rounded border-slate-300 focus:ring-eprom-blue" 
+                                                />
+                                                <span className="ml-2 text-sm text-slate-700 font-medium">{field.label}</span>
+                                            </label>
+                                        </div>
+                                    ) : (
+                                        <Input 
+                                            label={field.label}
+                                            type={field.type}
+                                            required={field.required}
+                                            value={dynamicData[field.id] || ''}
+                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </Card>
                 )}
-                
-                <div className="flex justify-end gap-4">
-                    <Button variant="secondary" onClick={() => navigate('/dashboard')}>Cancel</Button>
-                    <Button type="submit">Submit Proposal</Button>
+
+                <Card className="p-8 border-none shadow-lg">
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">03 // Supporting Documents</h3>
+                    
+                    <div className="mb-4">
+                        <label className="flex items-center justify-center w-full h-24 px-4 transition bg-white border-2 border-slate-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-slate-400 focus:outline-none bg-slate-50 hover:bg-slate-100">
+                            <span className="flex items-center space-x-2 text-slate-500">
+                                {isUploading ? (
+                                    <span className="flex items-center gap-2 text-sm font-bold animate-pulse">
+                                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                        Uploading to Drive...
+                                    </span>
+                                ) : (
+                                    <>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                                        <span className="text-xs font-bold uppercase">Upload to Google Drive</span>
+                                    </>
+                                )}
+                            </span>
+                            <input type="file" name="file_upload" className="hidden" disabled={isUploading} onChange={handleAttachmentUpload} />
+                        </label>
+                    </div>
+
+                    {attachments.length > 0 && (
+                        <div className="grid grid-cols-1 gap-2">
+                            {attachments.map((url, index) => (
+                                <div key={index} className="flex justify-between items-center p-3 bg-blue-50 border border-blue-100 rounded text-sm text-blue-800">
+                                    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:underline truncate max-w-[80%]">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                                        Attachment {index + 1} (Drive Link)
+                                    </a>
+                                    <button type="button" onClick={() => removeAttachment(index)} className="text-red-500 hover:text-red-700 text-xs font-bold uppercase">Remove</button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Card>
+
+                <div className="flex justify-end gap-4 pt-4">
+                    <Button type="submit" className="px-12 py-4 shadow-xl bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-widest text-sm">
+                        {editingIdea && (editingIdea.status === IdeaStatus.NEEDS_REVISION || editingIdea.status === IdeaStatus.REJECTED) ? 'Resubmit Protocol' : 'Launch Protocol'}
+                    </Button>
                 </div>
             </form>
         </div>
     );
 };
 
-// 6. Admin Panel
 const AdminPanel = () => {
+    const { settings, refreshSettings } = useAppContext();
     const [users, setUsers] = useState<User[]>([]);
-    const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
+    const [templates, setTemplates] = useState<FormTemplate[]>([]);
+    const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
+    
+    const [newCat, setNewCat] = useState('');
+    const [newDept, setNewDept] = useState('');
+    const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+    const [newTemplateName, setNewTemplateName] = useState('');
+    const [newTemplateDesc, setNewTemplateDesc] = useState('');
+    const [newFields, setNewFields] = useState<FormField[]>([]);
+    const [editingField, setEditingField] = useState<Partial<FormField>>({});
+    const DEFAULT_KPIS: RatingDimension[] = [
+        { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
+        { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation (resources, time).', weight: 20 },
+        { id: 'roi', name: 'Cost vs. Benefit', description: 'Estimated cost compared to expected benefits.', weight: 20 },
+        { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental improvement.', weight: 15 },
+        { id: 'risk', name: 'Risk Level', description: 'Operational, financial, or safety risks (High Score = Low Risk).', weight: 15 }
+    ];
+    const [currentKPIs, setCurrentKPIs] = useState<RatingDimension[]>(DEFAULT_KPIS);
+    const [newKPI, setNewKPI] = useState<Partial<RatingDimension>>({});
 
-    useEffect(() => {
-        setUsers(db.getUsers());
-    }, []);
+    useEffect(() => { refreshData(); }, []);
+    const refreshData = () => { setUsers(db.getUsers()); setTemplates(db.getTemplates()); };
+    const handleUserApproval = (uid: string, role: UserRole) => { db.updateUserStatus(uid, UserStatus.ACTIVE, role); refreshData(); };
+    const handleUserReject = (uid: string) => { db.updateUserStatus(uid, UserStatus.REJECTED); refreshData(); };
+    const handleRoleChange = (uid: string, newRole: UserRole) => { db.updateUserRole(uid, newRole); refreshData(); };
+    const handleAddCategory = () => { if (newCat) { db.updateSettings({ ...settings, categories: [...settings.categories, newCat] }); refreshSettings(); setNewCat(''); } };
+    const handleAddDept = () => { if (newDept) { db.updateSettings({ ...settings, departments: [...settings.departments, newDept] }); refreshSettings(); setNewDept(''); } };
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { try { const base64 = await db.fileToBase64(e.target.files[0]); const newSettings = { ...settings, logoUrl: base64 }; db.updateSettings(newSettings); refreshSettings(); } catch (err) { alert("Logo upload failed"); } } };
+    const addFieldToTemplate = () => { if(!editingField.label || !editingField.type) return; const newField: FormField = { id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(), label: editingField.label, type: editingField.type as any, required: editingField.required || false, options: editingField.options ? (editingField.options as any).split(',') : undefined }; setNewFields([...newFields, newField]); setEditingField({}); };
+    const addKPI = () => { if (!newKPI.name || !newKPI.weight) return; const k: RatingDimension = { id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15), name: newKPI.name, description: newKPI.description || '', weight: Number(newKPI.weight) }; setCurrentKPIs([...currentKPIs, k]); setNewKPI({}); };
+    const removeKPI = (id: string) => { setCurrentKPIs(currentKPIs.filter(k => k.id !== id)); };
+    const resetKPIs = () => setCurrentKPIs(DEFAULT_KPIS);
+    const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
+    const handleEditTemplate = (t: FormTemplate) => { setEditingTemplateId(t.id); setNewTemplateName(t.name); setNewTemplateDesc(t.description); setNewFields(t.fields); setCurrentKPIs(t.ratingConfig || []); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    const handleCancelEdit = () => { setEditingTemplateId(null); setNewTemplateName(''); setNewTemplateDesc(''); setNewFields([]); setCurrentKPIs(DEFAULT_KPIS); };
+    const saveTemplate = () => { if(!newTemplateName || newFields.length === 0) return; const t: FormTemplate = { id: editingTemplateId || Date.now().toString(), name: newTemplateName, description: newTemplateDesc, fields: newFields, ratingConfig: currentKPIs, isActive: true }; db.saveTemplate(t); handleCancelEdit(); refreshData(); };
+    const deleteTemplate = (id: string) => { if (confirm("Are you sure?")) { db.deleteTemplate(id); refreshData(); } }
 
-    const handleUserAction = (userId: string, action: 'approve' | 'reject' | 'promote') => {
-        if(action === 'approve') db.updateUserStatus(userId, UserStatus.ACTIVE);
-        if(action === 'reject') db.updateUserStatus(userId, UserStatus.REJECTED);
-        if(action === 'promote') db.updateUserRole(userId, UserRole.MANAGER);
-        setUsers(db.getUsers());
+    const PendingUserRow = ({ u }: { u: User }) => {
+      const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
+      return (
+        <tr className="hover:bg-amber-50 transition-colors bg-amber-50 border-l-4 border-amber-400">
+            <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
+            <td className="px-6 py-4 text-slate-600">{u.email}</td>
+            <td className="px-6 py-4 text-slate-600">{u.department}</td>
+            <td className="px-6 py-4"><select value={selectedRole} onChange={e => setSelectedRole(e.target.value as UserRole)} className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td>
+            <td className="px-6 py-4"><div className="flex space-x-2"><Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button><Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button></div></td>
+        </tr>
+      );
     }
 
     return (
-        <div className="max-w-6xl mx-auto px-4 py-20">
-             <h1 className="text-3xl font-bold mb-8">System Administration</h1>
-             <div className="flex gap-4 mb-8 border-b border-slate-200">
-                 <button onClick={() => setActiveTab('users')} className={`pb-2 px-4 font-bold uppercase text-sm ${activeTab === 'users' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-400'}`}>Users</button>
-                 <button onClick={() => setActiveTab('settings')} className={`pb-2 px-4 font-bold uppercase text-sm ${activeTab === 'settings' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-400'}`}>Settings</button>
-             </div>
-
-             {activeTab === 'users' && (
-                 <div className="bg-white rounded-lg shadow border border-slate-200 overflow-hidden">
-                     <table className="w-full text-sm text-left">
-                         <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                             <tr>
-                                 <th className="px-6 py-3">User</th>
-                                 <th className="px-6 py-3">Role</th>
-                                 <th className="px-6 py-3">Status</th>
-                                 <th className="px-6 py-3">Actions</th>
-                             </tr>
-                         </thead>
-                         <tbody className="divide-y divide-slate-100">
-                             {users.map(u => (
-                                 <tr key={u.id} className="hover:bg-slate-50">
-                                     <td className="px-6 py-4 font-medium">
-                                         <div>{u.username}</div>
-                                         <div className="text-xs text-slate-400">{u.email}</div>
-                                     </td>
-                                     <td className="px-6 py-4">{u.role}</td>
-                                     <td className="px-6 py-4">
-                                         <Badge color={u.status === UserStatus.ACTIVE ? 'green' : u.status === UserStatus.PENDING ? 'yellow' : 'red'}>{u.status}</Badge>
-                                     </td>
-                                     <td className="px-6 py-4 flex gap-2">
-                                         {u.status === UserStatus.PENDING && (
-                                             <>
-                                                 <Button variant="primary" className="py-1 px-3 text-xs" onClick={() => handleUserAction(u.id, 'approve')}>Approve</Button>
-                                                 <Button variant="danger" className="py-1 px-3 text-xs" onClick={() => handleUserAction(u.id, 'reject')}>Reject</Button>
-                                             </>
-                                         )}
-                                         {u.status === UserStatus.ACTIVE && u.role === UserRole.EMPLOYEE && (
-                                             <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => handleUserAction(u.id, 'promote')}>Make Manager</Button>
-                                         )}
-                                     </td>
-                                 </tr>
-                             ))}
-                         </tbody>
-                     </table>
-                 </div>
-             )}
-             
-             {activeTab === 'settings' && (
-                 <div className="p-8 text-center text-slate-400 bg-slate-50 rounded border border-slate-200">
-                     Global settings configuration would go here.
-                 </div>
-             )}
+        <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
+            <div className="flex items-center justify-between mb-8"><h1 className="text-3xl font-bold text-slate-900 tracking-tight">Control Room</h1><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div><span className="text-xs font-bold text-red-500 uppercase tracking-widest">Admin Privileges Active</span></div></div>
+            <div className="flex space-x-8 mb-10 border-b border-slate-200">
+                <button onClick={() => setActiveTab('users')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'users' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Personnel {activeTab === 'users' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}</button>
+                <button onClick={() => setActiveTab('forms')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'forms' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Protocol Builder {activeTab === 'forms' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}</button>
+                <button onClick={() => setActiveTab('settings')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'settings' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>System Config {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}</button>
+            </div>
+            {activeTab === 'users' && (
+                <Card className="overflow-hidden border-none shadow-lg">
+                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div><span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span></div></td></tr>))}</tbody></table></div>
+                </Card>
+            )}
+            {activeTab === 'forms' && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-1 space-y-4"><h3 className="text-lg font-bold text-slate-900 mb-4 uppercase tracking-wide">Active Protocols</h3>{templates.map(t => (<Card key={t.id} className={`p-5 border-l-4 transition-all hover:shadow-lg cursor-pointer ${editingTemplateId === t.id ? 'border-l-blue-500 bg-blue-50' : 'border-l-slate-900 bg-white'}`}><div className="flex justify-between items-start"><div onClick={() => handleEditTemplate(t)} className="flex-1"><div className="font-bold text-slate-900 text-sm">{t.name}</div><div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{t.fields.length} Data Points</div><div className="text-[10px] text-slate-900 mt-2 font-bold uppercase">{t.ratingConfig ? `${t.ratingConfig.length} Evaluators` : 'Default KPIs'}</div></div><div className="flex flex-col gap-1"><button className="text-blue-600 hover:text-blue-800 transition-colors text-xs uppercase font-bold" onClick={() => handleEditTemplate(t)}>Edit</button><button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button></div></div></Card>))}</div>
+                    <Card className="lg:col-span-2 p-8 border-none shadow-lg"><div className="flex justify-between items-center mb-8"><h3 className="text-lg font-bold text-slate-900 uppercase tracking-wide flex items-center"><span className={`w-2 h-2 rounded-full mr-3 ${editingTemplateId ? 'bg-blue-500' : 'bg-slate-900'}`}></span>{editingTemplateId ? 'Modify Existing Protocol' : 'New Protocol Configuration'}</h3>{editingTemplateId && (<button onClick={handleCancelEdit} className="text-xs text-slate-500 hover:text-slate-900 uppercase font-bold">Cancel Edit</button>)}</div><div className="mb-8 grid grid-cols-2 gap-6"><Input label="Protocol Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" /><Input label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Short operational summary..." /></div><div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8"><h4 className="text-xs font-bold text-slate-900 mb-6 uppercase tracking-widest border-b border-slate-200 pb-2">01 // Data Structure</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end"><Input label="Field Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} placeholder="Label" /><div className="mb-5"><label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Data Type</label><select value={editingField.type || ''} onChange={e => setEditingField({...editingField, type: e.target.value as any})} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 appearance-none input-base"><option value="">Select Type</option><option value="text">Short Text</option><option value="textarea">Long Text</option><option value="number">Numeric</option><option value="select">Selector</option><option value="checkbox">Boolean</option><option value="date">Date</option></select></div>{editingField.type === 'select' && (<Input label="Options (CSV)" value={editingField.options as any || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} placeholder="A, B, C" />)}<div className="mb-5 flex items-center h-10 bg-white px-3 rounded border border-slate-300"><input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-3 text-slate-900 bg-slate-100 border-slate-300 rounded" /><span className="text-xs text-slate-500 uppercase font-bold">Required</span></div></div><Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>{newFields.length > 0 && (<div className="mt-6 space-y-2">{newFields.map((f, idx) => (<div key={idx} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm"><span><span className="font-bold text-slate-900 uppercase">{f.label}</span> <span className="text-slate-500 ml-2">[{f.type}]</span></span><span className="text-[10px] text-slate-400 uppercase font-bold">{f.required ? 'REQ' : 'OPT'}</span></div>))}</div>)}</div><div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8"><div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-2"><h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">02 // Evaluation Metrics</h4><div className={`text-xs font-bold uppercase tracking-wide ${totalWeight === 100 ? 'text-emerald-600' : 'text-red-500'}`}>Total Weight: {totalWeight}%</div></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end mb-6"><Input label="Metric Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} placeholder="e.g. ROI" /><Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} placeholder="Context" /><Input label="Weight (%)" type="number" value={newKPI.weight || ''} onChange={e => setNewKPI({...newKPI, weight: Number(e.target.value)})} placeholder="20" /><Button onClick={addKPI} className="mb-5 bg-white hover:bg-slate-100 border-slate-300 text-slate-600">Add Metric</Button></div><div className="space-y-2">{currentKPIs.map(kpi => (<div key={kpi.id} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm"><div className="flex-1"><span className="font-bold text-slate-800 mr-3 uppercase">{kpi.name}</span><span className="text-slate-500">{kpi.description}</span></div><div className="flex items-center gap-4"><Badge color="blue">{kpi.weight}%</Badge><button onClick={() => removeKPI(kpi.id)} className="text-red-500 hover:text-red-700 transition-colors uppercase font-bold text-[10px]">Remove</button></div></div>))}</div><div className="mt-6 text-right"><button onClick={resetKPIs} className="text-[10px] text-slate-900 hover:text-slate-600 uppercase font-bold tracking-wider">Reset Defaults</button></div></div><div className="flex justify-end pt-6 border-t border-slate-200"><Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>{editingTemplateId ? 'Update Protocol' : 'Deploy Protocol'}</Button></div></Card>
+                </div>
+            )}
+            {activeTab === 'settings' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><Card className="p-8 border-none shadow-lg"><h3 className="font-bold text-lg mb-6 text-slate-900 uppercase tracking-wide">System Definitions</h3><div className="mb-8 p-6 bg-slate-50 rounded border border-slate-200"><label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Brand Identity (Logo)</label><div className="flex items-center gap-4">{settings.logoUrl && (<div className="w-16 h-16 bg-white border border-slate-200 rounded flex items-center justify-center p-2"><img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" /></div>)}<input type="file" onChange={handleLogoUpload} accept="image/*" className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-bold file:uppercase file:bg-slate-900 file:text-white hover:file:bg-slate-800 transition-colors"/></div></div><div className="mb-8"><label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Operational Categories</label><div className="flex gap-3 mb-4"><Input placeholder="New Category" value={newCat} onChange={e => setNewCat(e.target.value)} className="mb-0 flex-1" /><Button onClick={handleAddCategory} className="whitespace-nowrap px-6">Add</Button></div><div className="flex flex-wrap gap-2">{settings.categories.map(c => <Badge key={c} color="gray">{c}</Badge>)}</div></div><div className="pt-6 border-t border-slate-200"><label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Organization Units</label><div className="flex gap-3 mb-4"><Input placeholder="New Department" value={newDept} onChange={e => setNewDept(e.target.value)} className="mb-0 flex-1" /><Button onClick={handleAddDept} className="whitespace-nowrap px-6">Add</Button></div><div className="flex flex-wrap gap-2">{settings.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}</div></div></Card></div>
+            )}
         </div>
     );
 };
 
-// 7. Dashboard (Optimized)
 const Dashboard = () => {
   const { user } = useAppContext();
-  const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [published, setPublished] = useState<Idea[]>([]);
-  const [templates, setTemplates] = useState<FormTemplate[]>([]);
   const navigate = useNavigate();
-
-  // For managing modal/rating state
-  const [selectedIdea, setSelectedIdea] = useState<Idea | null>(null);
-  
-  // Rating State
-  const [ratingDetails, setRatingDetails] = useState<Record<string, number>>({});
-  const [ratingComment, setRatingComment] = useState('');
-  const [isAutoEvaluating, setIsAutoEvaluating] = useState(false);
-
-  // Carousel State
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isPaused, setIsPaused] = useState(false);
-  
-  // Load templates to get KPI Config
-  useEffect(() => {
-      setTemplates(db.getTemplates());
-  }, []);
+  const [ideas, setIdeas] = useState<Idea[]>([]);
 
   useEffect(() => {
-    const all = db.getIdeas();
-    setPublished(all.filter(i => i.status === IdeaStatus.PUBLISHED));
-
-    // Dashboard Visibility Logic
-    if (user?.role === UserRole.EMPLOYEE) {
-      // Employees: See only their own ideas
-      setIdeas(all.filter(i => i.authorId === user.id));
-    } else {
-      // Managers, Admins, and Approved Guests: See everything EXCEPT drafts
-      // (Unless they are the author of the draft)
-      setIdeas(all.filter(i => 
-        i.status !== IdeaStatus.DRAFT || i.authorId === user?.id
-      ));
+    if (user) {
+      const allIdeas = db.getIdeas();
+      // Admin/Manager sees all, Employee sees own
+      if (user.role === UserRole.ADMIN || user.role === UserRole.MANAGER) {
+        setIdeas(allIdeas);
+      } else {
+        setIdeas(allIdeas.filter(i => i.authorId === user.id));
+      }
     }
   }, [user]);
 
-  // Auto-scroll Carousel Effect
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container || published.length === 0 || isPaused) return;
-
-    const interval = setInterval(() => {
-        const firstCard = container.firstElementChild as HTMLElement;
-        if (!firstCard) return;
-        
-        // Calculate width of one item including gap (gap-6 = 24px)
-        const itemWidth = firstCard.offsetWidth + 24; 
-        const maxScroll = container.scrollWidth - container.clientWidth;
-        
-        // If we are at the end (or close enough), go back to start
-        if (container.scrollLeft >= maxScroll - 10) { 
-             container.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-             container.scrollBy({ left: itemWidth, behavior: 'smooth' });
-        }
-    }, 1000); // 1-second interval for readability
-
-    return () => clearInterval(interval);
-  }, [published, isPaused]);
-
-  const handleEdit = (idea: Idea) => {
-    navigate('/submit', { state: { idea } });
-  };
-  
   const handleDelete = (id: string) => {
-    if(confirm("Are you sure you want to withdraw this proposal? This action cannot be undone.")) {
-        db.deleteIdea(id);
-        setIdeas(db.getIdeas()); // Refresh
-    }
-  }
-
-  const handleStatusChange = (idea: Idea, status: IdeaStatus) => {
-    const updated = { ...idea, status };
-    db.saveIdea(updated);
-    setIdeas(db.getIdeas()); // Refresh
-  };
-
-  // --- KPI Calculation Logic ---
-  const getCurrentKPIs = (idea: Idea) => {
-      const template = templates.find(t => t.id === idea.templateId);
-      // Fallback if template deleted or legacy idea
-      if(!template || !template.ratingConfig) {
-          return [
-            { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
-            { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation.', weight: 20 },
-            { id: 'roi', name: 'Cost vs. Benefit', description: 'ROI.', weight: 20 },
-            { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental.', weight: 15 },
-            { id: 'risk', name: 'Risk Level', description: 'Operational risks.', weight: 15 }
-          ];
-      }
-      return template.ratingConfig;
-  };
-
-  const calculateGrade = (kpis: RatingDimension[], details: Record<string, number>) => {
-      let totalWeightedScore = 0;
-      let totalMaxPossible = 0;
-
-      kpis.forEach(kpi => {
-          const score = details[kpi.id] || 1; // Default to 1 if not set
-          totalWeightedScore += score * kpi.weight;
-          totalMaxPossible += 5 * kpi.weight; // Max score is 5
-      });
-
-      const percentage = (totalWeightedScore / totalMaxPossible) * 100;
-
-      let grade = 'F';
-      if(percentage >= 80) grade = 'A';
-      else if (percentage >= 60) grade = 'B';
-      else if (percentage >= 40) grade = 'C';
-      else grade = 'D';
-
-      return { percentage: Math.round(percentage), grade };
-  };
-
-  const handleAutoEvaluate = async () => {
-    if (!selectedIdea) return;
-    setIsAutoEvaluating(true);
-    const kpis = getCurrentKPIs(selectedIdea);
-    
-    // Call AI Service
-    const result = await aiService.generateEvaluation(selectedIdea.title, selectedIdea.description, kpis);
-    
-    if (result) {
-        setRatingDetails(result.scores);
-        setRatingComment(result.comment);
-    } else {
-        alert("AI Evaluation failed. Please try again manually.");
-    }
-    setIsAutoEvaluating(false);
-  };
-
-  const submitRating = () => {
-    if (!selectedIdea || !user) return;
-    
-    const kpis = getCurrentKPIs(selectedIdea);
-    const { percentage, grade } = calculateGrade(kpis, ratingDetails);
-    
-    const detailsArray = Object.entries(ratingDetails).map(([key, val]) => ({ dimensionId: key, score: val }));
-
-    const newRating: Rating = {
-      managerId: user.id,
-      managerName: user.username,
-      details: detailsArray,
-      totalScore: 5 * (percentage / 100),
-      percentage,
-      grade,
-      comment: ratingComment,
-      createdAt: new Date().toISOString()
-    };
-    
-    const updatedRatings = [
-        ...selectedIdea.ratings.filter(r => r.managerId !== user.id), 
-        newRating
-    ];
-
-    const updated = { 
-        ...selectedIdea, 
-        ratings: updatedRatings
-    };
-    
-    db.saveIdea(updated);
-    setIdeas(db.getIdeas());
-    setSelectedIdea(null);
-    setRatingDetails({});
-    setRatingComment('');
-  };
-
-  const copyShareLink = (id: string) => {
-      const baseUrl = window.location.href.split('#')[0];
-      const url = `${baseUrl}#/view/${id}`;
-      navigator.clipboard.writeText(url);
-      alert("Shareable link copied to clipboard!");
-  };
-
-  const getStatusColor = (s: IdeaStatus) => {
-    switch(s) {
-      case IdeaStatus.PUBLISHED: return 'green';
-      case IdeaStatus.APPROVED: return 'blue';
-      case IdeaStatus.REJECTED: return 'red';
-      case IdeaStatus.NEEDS_REVISION: return 'amber';
-      case IdeaStatus.ARCHIVED: return 'gray';
-      default: return 'gray';
+    if (window.confirm("Are you sure you want to delete this protocol?")) {
+      db.deleteIdea(id);
+      setIdeas(prev => prev.filter(i => i.id !== id));
     }
   };
-
-  const renderDynamicSummary = (idea: Idea) => {
-      const cost = idea.dynamicData?.['cost'] || (idea as any).estimatedCost || 'N/A';
-      const feasibility = idea.dynamicData?.['feasibility'] || (idea as any).feasibility || 'N/A';
-      const timeline = idea.dynamicData?.['timeline'] || (idea as any).timeline || 'N/A';
-
-      const isDark = !!idea.coverImage;
-      const textClass = isDark ? 'text-slate-300 drop-shadow-sm' : 'text-slate-500';
-      const labelClass = isDark ? 'text-slate-400' : 'text-slate-400';
-      const bgClass = isDark ? 'bg-white/10 border-white/10 backdrop-blur-sm' : 'bg-slate-50 border-slate-200';
-
-      return (
-         <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-6 p-5 rounded border ${bgClass} ${textClass}`}>
-            <div><span className={`font-bold block uppercase mb-1 ${labelClass}`}>Author</span> {idea.authorName}</div>
-            <div><span className={`font-bold block uppercase mb-1 ${labelClass}`}>Cost</span> {cost}</div>
-            <div><span className={`font-bold block uppercase mb-1 ${labelClass}`}>Feasibility</span> {feasibility}</div>
-            <div><span className={`font-bold block uppercase mb-1 ${labelClass}`}>Timeline</span> {timeline}</div>
-         </div>
-      );
-  }
-
-  // --- Rating Modal State Helper ---
-  const currentReviewKPIs = selectedIdea ? getCurrentKPIs(selectedIdea) : [];
-  const currentReviewStats = selectedIdea ? calculateGrade(currentReviewKPIs, ratingDetails) : { percentage: 0, grade: 'N/A' };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-      {/* Published Grid Section */}
-      <div className="mb-16">
-          <div className="flex justify-between items-end mb-6 border-b border-slate-200 pb-2">
-            <h2 className="text-sm font-bold text-slate-500 flex items-center uppercase tracking-widest">
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-900 mr-3 animate-pulse"></span> 
-                Live Intelligence Stream
-            </h2>
-            {isPaused && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Stream Paused</span>}
+       <div className="flex justify-between items-end mb-8 border-b border-slate-200 pb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Mission Control</h1>
+            <p className="text-slate-500 font-medium text-sm mt-1">
+              {user?.role === UserRole.EMPLOYEE ? 'My Active Protocols' : 'Global Innovation Overview'}
+            </p>
           </div>
-          
-          <div 
-            ref={scrollContainerRef}
-            className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory scroll-smooth"
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
-          >
-              {published.length === 0 ? (
-                  <div className="w-full p-8 text-slate-400 bg-slate-50 rounded border border-slate-200 text-xs uppercase tracking-wider text-center flex-shrink-0">No active intelligence streams.</div>
-              ) : (
-                  published.map(p => (
-                      <div key={p.id} className="min-w-[85vw] md:min-w-[450px] flex-shrink-0 snap-center bg-slate-900 rounded-lg border border-slate-800 shadow-xl relative overflow-hidden group hover:border-eprom-accent transition-all h-[400px]">
-                          {p.coverImage && (
-                              <div className="absolute inset-0 z-0 bg-slate-950">
-                                  <img src={p.coverImage} className="w-full h-full object-cover opacity-60 transition-transform duration-700 group-hover:scale-110" />
-                              </div>
-                          )}
-                          <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
-                          
-                          <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                              <button onClick={() => copyShareLink(p.id)} className="text-[10px] bg-white text-slate-900 font-bold uppercase px-3 py-1 rounded shadow-lg">Share</button>
-                          </div>
+          {user?.role === UserRole.EMPLOYEE && (
+            <Link to="/submit">
+              <Button>+ Initialize Protocol</Button>
+            </Link>
+          )}
+       </div>
 
-                          <div className="absolute inset-0 z-10 p-6 flex flex-col justify-end">
-                              <div className="flex justify-between items-start mb-2">
-                                  <Badge color="green" className="bg-emerald-500/20 text-emerald-300 border-none backdrop-blur">Live</Badge>
-                                  {p.ratings.length > 0 && (
-                                      <div className="px-2 py-0.5 rounded text-[10px] font-bold text-emerald-300 border border-emerald-500/30 bg-emerald-900/40 uppercase tracking-wide backdrop-blur">
-                                          Grade {p.ratings[0].grade}
-                                      </div>
-                                  )}
-                              </div>
-                              <h4 className="font-bold text-white mb-2 text-xl leading-tight drop-shadow-xl" title={p.title}>{p.title}</h4>
-                              <p className="text-xs text-slate-300 mb-4 line-clamp-3 leading-relaxed font-medium drop-shadow-md">{p.description}</p>
-                              <div className="text-[10px] text-slate-400 pt-4 border-t border-white/10 flex justify-between uppercase tracking-wider font-bold">
-                                  <span>{p.authorName}</span>
-                                  <span>{new Date(p.createdAt).toLocaleDateString()}</span>
-                              </div>
-                          </div>
-                      </div>
-                  ))
-              )}
-          </div>
-      </div>
-
-      <div className="flex justify-between items-center mb-10">
-        <div>
-           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
-             {user?.role === UserRole.EMPLOYEE ? 'Bank of Ideas' : 'Command Center'}
-           </h1>
-           <p className="text-slate-500 mt-1 text-sm uppercase tracking-wide">Active Initiatives Overview</p>
-        </div>
-        
-        {user?.role === UserRole.EMPLOYEE && (
-          <Button onClick={() => navigate('/submit')} className="shadow-lg bg-slate-900 text-white hover:bg-slate-800 px-6">+ New Record</Button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {ideas.map(idea => (
-          <Card key={idea.id} className={`h-full flex flex-col transition-all hover:border-slate-300 relative overflow-hidden ${idea.parentIdeaId ? 'border-l-4 border-l-purple-500' : ''} ${idea.coverImage ? 'bg-slate-950 border-none' : 'p-8'}`}>
-            {idea.coverImage && (
-                <>
-                    <div className="absolute inset-0 z-0 bg-slate-950">
-                         {/* Reduced opacity to 30% for darker background */}
-                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-30" />
-                    </div>
-                    {/* Stronger gradient overlay for better text contrast */}
-                    <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/90 to-black/60" />
-                </>
-            )}
-
-            <div className={`relative z-10 flex-1 flex flex-col justify-between ${idea.coverImage ? 'p-8' : ''}`}>
-              <div className="flex-1 mb-6">
-                 <div className="flex items-center gap-3 mb-4 flex-wrap">
-                    <h3 className={`text-2xl font-bold tracking-tight leading-tight ${idea.coverImage ? 'text-white drop-shadow-md' : 'text-slate-900'}`}>{idea.title}</h3>
-                    <Badge color={getStatusColor(idea.status)}>{idea.status}</Badge>
-                    <Badge color="gray" className={idea.coverImage ? 'bg-white/10 text-white border-white/20 backdrop-blur-sm' : ''}>{idea.category}</Badge>
-                    {idea.parentIdeaId && <Badge color="amber">Linked</Badge>}
-                 </div>
-                 <p className={`mb-6 leading-relaxed font-medium text-sm ${idea.coverImage ? 'text-slate-300 drop-shadow-sm' : 'text-slate-600'}`}>{idea.description}</p>
-                 
-                 {renderDynamicSummary(idea)}
-
-                 {/* Ratings Display */}
-                 {idea.ratings.length > 0 && (
-                   <div className={`p-5 rounded border mb-4 shadow-sm ${idea.coverImage ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'}`}>
-                     <p className="text-[10px] font-bold uppercase text-slate-400 mb-4 tracking-widest">Performance Metrics</p>
-                     {idea.ratings.map((r, idx) => (
-                       <div key={idx} className={`mb-4 last:mb-0 border-b last:border-0 pb-4 last:pb-0 ${idea.coverImage ? 'border-white/10' : 'border-slate-100'}`}>
-                         <div className="flex justify-between items-center mb-2">
-                            <span className={`font-bold text-sm ${idea.coverImage ? 'text-slate-200' : 'text-slate-700'}`}>{r.managerName}</span>
-                            <div className="flex items-center gap-3">
-                                <span className={`text-xl font-bold tracking-tight ${idea.coverImage ? 'text-white' : 'text-slate-900'}`}>{r.percentage}%</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
-                                    r.grade === 'A' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 
-                                    r.grade === 'B' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 
-                                    r.grade === 'C' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : 'bg-red-100 text-red-700 border border-red-200'
-                                }`}>Grade {r.grade}</span>
-                            </div>
-                         </div>
-                         <p className="text-xs text-slate-500 italic line-clamp-2">"{r.comment}"</p>
-                       </div>
-                     ))}
-                   </div>
-                 )}
-              </div>
-
-              {/* Actions Area - Stacked vertically for grid layout */}
-              <div className="flex flex-col gap-2 pt-4 border-t border-slate-200/10">
-                {/* External Share Button for Everyone if active */}
-                <Button variant="ghost" className={`w-full text-xs uppercase font-bold border ${idea.coverImage ? 'text-slate-300 border-slate-600 hover:text-white hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:text-slate-900'}`} onClick={() => copyShareLink(idea.id)}>Get Link</Button>
-
-                {(user?.role === UserRole.MANAGER || user?.role === UserRole.ADMIN) && (
-                   <>
-                     {idea.status === IdeaStatus.SUBMITTED && (
-                        <div className="flex gap-2">
-                          <Button variant="primary" className="flex-1 text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.APPROVED)}>Approve</Button>
-                          <Button variant="danger" className="flex-1 text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.REJECTED)}>Reject</Button>
-                        </div>
-                     )}
-                     {idea.status === IdeaStatus.SUBMITTED && (
-                       <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Request Revision</Button>
-                     )}
-                     {idea.status === IdeaStatus.APPROVED && (
-                        <div className="flex gap-2">
-                            <Button variant="primary" className="flex-1 text-xs uppercase bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg" onClick={() => handleStatusChange(idea, IdeaStatus.PUBLISHED)}>Go Live</Button>
-                            <Button variant="secondary" className="flex-1 text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Request Revision</Button>
-                        </div>
-                     )}
-                     
-                     {/* Manager actions for PUBLISHED ideas (Revert/Reject) */}
-                     {idea.status === IdeaStatus.PUBLISHED && (
-                        <div className="flex flex-col gap-2">
-                            <Button variant="secondary" className="w-full text-xs uppercase border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleStatusChange(idea, IdeaStatus.APPROVED)}>Unpublish (To Approved)</Button>
-                        </div>
-                     )}
-
-                     {/* Manager actions for REJECTED ideas */}
-                     {idea.status === IdeaStatus.REJECTED && (
-                        <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-slate-100/10">
-                            <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-center mb-1">REJECTED OPTIONS</div>
-                            <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Request Revision</Button>
-                            <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.SUBMITTED)}>Un-Reject (Re-open)</Button>
-                            <Button variant="ghost" className="w-full text-xs uppercase text-slate-400 hover:text-slate-600" onClick={() => handleStatusChange(idea, IdeaStatus.ARCHIVED)}>Archive Record</Button>
-                        </div>
-                     )}
-                     
-                     {/* Manager actions for ARCHIVED ideas */}
-                     {idea.status === IdeaStatus.ARCHIVED && (
-                        <div className="flex flex-col gap-2">
-                             <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.SUBMITTED)}>Restore from Archive</Button>
-                        </div>
-                     )}
-
-                     {/* Evaluate button logic */}
-                     {idea.status !== IdeaStatus.ARCHIVED && idea.status !== IdeaStatus.REJECTED && (
-                        <Button variant="ghost" className={`w-full text-xs uppercase border ${idea.coverImage ? 'border-slate-600 text-slate-300 hover:text-white' : 'border-slate-200 text-slate-600'}`} onClick={() => {
-                            setSelectedIdea(idea);
-                            const existing = idea.ratings.find(r => r.managerId === user.id);
-                            const initialDetails: Record<string, number> = {};
-                            getCurrentKPIs(idea).forEach(k => {
-                                initialDetails[k.id] = existing ? (existing.details.find(d => d.dimensionId === k.id)?.score || 1) : 3; 
-                            });
-                            setRatingDetails(initialDetails);
-                            setRatingComment(existing?.comment || '');
-                        }}>Evaluate</Button>
-                     )}
-                   </>
-                )}
-
-                {/* Employee Actions */}
-                {user?.id === idea.authorId && (idea.status === IdeaStatus.DRAFT || idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED || idea.status === IdeaStatus.SUBMITTED) && (
-                   <div className="flex flex-col gap-2">
-                        <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleEdit(idea)}>
-                            {idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED ? 'Edit & Resubmit' : 'Edit Record'}
-                        </Button>
-                        {(idea.status === IdeaStatus.DRAFT || idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED) && (
-                             <Button variant="danger" className="w-full text-xs uppercase" onClick={() => handleDelete(idea.id)}>Withdraw / Delete</Button>
-                        )}
-                   </div>
-                )}
-              </div>
-            </div>
-          </Card>
-        ))}
-        {ideas.length === 0 && <div className="col-span-full text-center text-slate-400 py-20 uppercase tracking-widest text-sm">System Idle.</div>}
-      </div>
-
-      {/* Advanced Rating Modal */}
-      {selectedIdea && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-           <Card className="w-full max-w-2xl p-8 border-none shadow-2xl bg-white max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-start mb-8 border-b border-slate-100 pb-6">
-                <div>
-                    <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight">Evaluate Protocol</h3>
-                    <p className="text-slate-500 text-xs uppercase tracking-wide mt-1">"{selectedIdea.title}"</p>
+       {ideas.length === 0 ? (
+         <div className="py-20 text-center bg-white border border-slate-200 rounded-xl">
+           <p className="text-slate-400 font-bold uppercase tracking-wider text-sm">No protocols in registry.</p>
+         </div>
+       ) : (
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+           {ideas.map(idea => (
+             <Card key={idea.id} className="flex flex-col h-full relative group">
+                <div className="p-6 flex-1">
+                  <div className="flex justify-between items-start mb-4">
+                    <Badge color={
+                      idea.status === IdeaStatus.PUBLISHED ? 'blue' : 
+                      idea.status === IdeaStatus.APPROVED ? 'green' : 
+                      idea.status === IdeaStatus.REJECTED ? 'red' : 'yellow'
+                    }>{idea.status}</Badge>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(idea.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <h3 className="font-bold text-lg text-slate-900 mb-2 leading-tight">{idea.title}</h3>
+                  <p className="text-sm text-slate-500 line-clamp-3">{idea.description}</p>
                 </div>
-                {/* Live Score Preview */}
-                <div className="text-right">
-                    <div className="text-4xl font-bold text-slate-900 tracking-tighter">{currentReviewStats.percentage}%</div>
-                    <div className={`text-[10px] font-bold px-2 py-0.5 rounded inline-block uppercase tracking-wider mt-1 ${
-                         currentReviewStats.grade === 'A' ? 'bg-emerald-100 text-emerald-700' : 
-                         currentReviewStats.grade === 'B' ? 'bg-blue-100 text-blue-700' : 
-                         currentReviewStats.grade === 'C' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
-                    }`}>Grade {currentReviewStats.grade}</div>
-                </div>
-              </div>
-
-              {/* AI Auto-Evaluation Button */}
-              <div className="mb-6 flex justify-end">
-                  <button 
-                    onClick={handleAutoEvaluate} 
-                    disabled={isAutoEvaluating}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-wider hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg"
-                  >
-                      {isAutoEvaluating ? (
-                          <>
-                            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                            Analyzing...
-                          </>
-                      ) : (
-                          <>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                            Auto-Evaluate with AI
-                          </>
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center rounded-b-lg">
+                   <Link to={`/view/${idea.id}`} className="text-xs font-bold text-eprom-blue uppercase hover:underline">View Details</Link>
+                   <div className="flex gap-2">
+                      {(user?.id === idea.authorId || user?.role === UserRole.ADMIN) && (
+                        <>
+                          <button onClick={() => navigate('/submit', { state: { idea } })} className="text-slate-400 hover:text-blue-600">
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                          </button>
+                          <button onClick={() => handleDelete(idea.id)} className="text-slate-400 hover:text-red-600">
+                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </>
                       )}
-                  </button>
-              </div>
-
-              <div className="space-y-6 mb-8">
-                  {currentReviewKPIs.map(kpi => (
-                      <div key={kpi.id} className="bg-slate-50 p-5 rounded border border-slate-200">
-                          <div className="flex justify-between items-center mb-3">
-                              <label className="font-bold text-slate-800 text-sm uppercase">{kpi.name}</label>
-                              <span className="text-[10px] text-slate-900 font-bold bg-slate-200 px-2 py-1 rounded uppercase tracking-wide">{kpi.weight}% Impact</span>
-                          </div>
-                          <p className="text-xs text-slate-500 mb-4">{kpi.description}</p>
-                          
-                          <div className="flex items-center gap-6">
-                              <input 
-                                type="range" 
-                                min="1" max="5" step="1"
-                                value={ratingDetails[kpi.id] || 3}
-                                onChange={(e) => setRatingDetails(prev => ({...prev, [kpi.id]: Number(e.target.value)}))}
-                                className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-900"
-                              />
-                              <div className="text-2xl font-bold text-slate-900 w-8 text-center">{ratingDetails[kpi.id] || 3}</div>
-                          </div>
-                          <div className="flex justify-between text-[10px] text-slate-400 mt-2 px-1 uppercase font-bold tracking-wider">
-                              <span>Minimal</span>
-                              <span>Critical</span>
-                          </div>
-                      </div>
-                  ))}
-              </div>
-
-              <div className="mb-8">
-                <label className="block text-xs font-bold mb-3 text-slate-400 uppercase tracking-wide">Assessment Notes</label>
-                <textarea className="w-full border border-slate-300 bg-white text-slate-900 rounded p-4 focus:border-slate-900 focus:outline-none placeholder-slate-400 min-h-[100px]" value={ratingComment} onChange={e => setRatingComment(e.target.value)} placeholder="ENTER JUSTIFICATION..."></textarea>
-              </div>
-
-              <div className="flex justify-end gap-4 pt-6 border-t border-slate-100">
-                <Button variant="ghost" onClick={() => setSelectedIdea(null)} className="uppercase text-xs text-slate-500">Abort</Button>
-                <Button onClick={submitRating} className="uppercase text-xs px-8 shadow-lg">Confirm Rating</Button>
-              </div>
-           </Card>
-        </div>
-      )}
-      
-      {/* Global AI Chat Assistant */}
-      {user && <AIChat />}
+                   </div>
+                </div>
+             </Card>
+           ))}
+         </div>
+       )}
     </div>
   );
 };
 
-// ... (Rest of App.tsx remains unchanged) ...
-const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // ... (No changes here, context remains same) ...
-  const [user, setUser] = useState<User | null>(null);
-  const [settings, setSettings] = useState<AppSettings>(db.getSettings());
-
-  useEffect(() => {
-    setUser(db.getCurrentUser());
-  }, []);
-
-  const login = async (u: string, p: string) => {
-    // Simulate Async
-    await new Promise(r => setTimeout(r, 500));
-    const loggedUser = db.loginUser(u, p);
-    setUser(loggedUser);
-  };
-
-  const logout = () => {
-    db.logoutUser();
-    setUser(null);
-  };
-
-  const refreshSettings = () => {
-    setSettings(db.getSettings());
-  };
-
-  return (
-    <AppContext.Provider value={{ user, settings, login, logout, refreshSettings }}>
-      {children}
-    </AppContext.Provider>
-  );
+const ProtectedRoute = ({ children, roles, excludedRoles }: { children: React.ReactElement, roles?: UserRole[], excludedRoles?: UserRole[] }) => {
+  const { user } = useAppContext();
+  if (!user) return <Navigate to="/auth" />;
+  if (roles && !roles.includes(user.role)) return <Navigate to="/" />;
+  if (excludedRoles && excludedRoles.includes(user.role)) return <Navigate to="/admin" />;
+  return children;
 };
 
-// ... (Rest of App component unchanged) ...
 const App = () => {
   return (
     <HashRouter>
@@ -1527,7 +1220,6 @@ const App = () => {
               <Route path="/view/:id" element={<SharedIdeaPage />} />
               <Route path="/search" element={<SearchPage />} />
               
-              {/* Dashboard is open to all logged in users, role logic handled inside */}
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />
@@ -1561,17 +1253,6 @@ const App = () => {
       </AppProvider>
     </HashRouter>
   );
-};
-
-// Re-add ProtectedRoute helper since it was inside App in previous context but useful to keep explicit
-const ProtectedRoute = ({ children, roles, excludedRoles }: { children: React.ReactElement, roles?: UserRole[], excludedRoles?: UserRole[] }) => {
-  const { user } = useAppContext();
-  
-  if (!user) return <Navigate to="/auth" />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" />;
-  if (excludedRoles && excludedRoles.includes(user.role)) return <Navigate to="/admin" />; 
-  
-  return children;
 };
 
 export default App;
