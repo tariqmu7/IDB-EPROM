@@ -1509,6 +1509,10 @@ const Dashboard = () => {
   // Rating State
   const [ratingDetails, setRatingDetails] = useState<Record<string, number>>({});
   const [ratingComment, setRatingComment] = useState('');
+
+  // Carousel State
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
   
   // Load templates to get KPI Config
   useEffect(() => {
@@ -1525,6 +1529,30 @@ const Dashboard = () => {
       setIdeas(all);
     }
   }, [user]);
+
+  // Auto-scroll Carousel Effect
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || published.length === 0 || isPaused) return;
+
+    const interval = setInterval(() => {
+        const firstCard = container.firstElementChild as HTMLElement;
+        if (!firstCard) return;
+        
+        // Calculate width of one item including gap (gap-6 = 24px)
+        const itemWidth = firstCard.offsetWidth + 24; 
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        
+        // If we are at the end (or close enough), go back to start
+        if (container.scrollLeft >= maxScroll - 10) { 
+             container.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+             container.scrollBy({ left: itemWidth, behavior: 'smooth' });
+        }
+    }, 1000); // 1-second interval for readability
+
+    return () => clearInterval(interval);
+  }, [published, isPaused]);
 
   const handleEdit = (idea: Idea) => {
     navigate('/submit', { state: { idea } });
@@ -1656,11 +1684,20 @@ const Dashboard = () => {
     <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
       {/* Published Grid Section */}
       <div className="mb-16">
-          <h2 className="text-sm font-bold text-slate-500 mb-6 flex items-center uppercase tracking-widest border-b border-slate-200 pb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-900 mr-3 animate-pulse"></span> 
-              Live Intelligence Stream
-          </h2>
-          <div className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory">
+          <div className="flex justify-between items-end mb-6 border-b border-slate-200 pb-2">
+            <h2 className="text-sm font-bold text-slate-500 flex items-center uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-900 mr-3 animate-pulse"></span> 
+                Live Intelligence Stream
+            </h2>
+            {isPaused && <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest animate-pulse">Stream Paused</span>}
+          </div>
+          
+          <div 
+            ref={scrollContainerRef}
+            className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory scroll-smooth"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+          >
               {published.length === 0 ? (
                   <div className="w-full p-8 text-slate-400 bg-slate-50 rounded border border-slate-200 text-xs uppercase tracking-wider text-center flex-shrink-0">No active intelligence streams.</div>
               ) : (
