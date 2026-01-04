@@ -1354,7 +1354,8 @@ const AdminPanel = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [templates, setTemplates] = useState<FormTemplate[]>([]);
     const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
-    
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
     const [newCat, setNewCat] = useState('');
     const [newDept, setNewDept] = useState('');
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -1380,7 +1381,31 @@ const AdminPanel = () => {
     const handleRoleChange = (uid: string, newRole: UserRole) => { db.updateUserRole(uid, newRole); refreshData(); };
     const handleAddCategory = () => { if (newCat) { db.updateSettings({ ...settings, categories: [...settings.categories, newCat] }); refreshSettings(); setNewCat(''); } };
     const handleAddDept = () => { if (newDept) { db.updateSettings({ ...settings, departments: [...settings.departments, newDept] }); refreshSettings(); setNewDept(''); } };
-    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files && e.target.files[0]) { try { const base64 = await db.fileToBase64(e.target.files[0]); const newSettings = { ...settings, logoUrl: base64 }; db.updateSettings(newSettings); refreshSettings(); } catch (err) { alert("Logo upload failed"); } } };
+    
+    const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { 
+        if (e.target.files && e.target.files[0]) { 
+            setIsUploadingLogo(true);
+            try { 
+                const file = e.target.files[0];
+                let url = await db.uploadToDrive(file);
+                
+                // Optimization: Try to convert to viewable URL if it's a direct download link
+                if (url.includes('export=download')) {
+                    url = url.replace('export=download', 'export=view');
+                }
+
+                const newSettings = { ...settings, logoUrl: url }; 
+                db.updateSettings(newSettings); 
+                refreshSettings(); 
+                alert("Logo updated successfully via Drive!");
+            } catch (err: any) { 
+                alert("Logo upload failed: " + err.message); 
+            } finally {
+                setIsUploadingLogo(false);
+            }
+        } 
+    };
+
     const addFieldToTemplate = () => { if(!editingField.label || !editingField.type) return; const newField: FormField = { id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(), label: editingField.label, type: editingField.type as any, required: editingField.required || false, options: editingField.options ? (editingField.options as any).split(',') : undefined }; setNewFields([...newFields, newField]); setEditingField({}); };
     const addKPI = () => { if (!newKPI.name || !newKPI.weight) return; const k: RatingDimension = { id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15), name: newKPI.name, description: newKPI.description || '', weight: Number(newKPI.weight) }; setCurrentKPIs([...currentKPIs, k]); setNewKPI({}); };
     const removeKPI = (id: string) => { setCurrentKPIs(currentKPIs.filter(k => k.id !== id)); };
@@ -1551,8 +1576,10 @@ const AdminPanel = () => {
                         <div className="flex items-center gap-6">
                             {settings.logoUrl ? <img src={settings.logoUrl} className="h-16 w-auto" alt="Logo" /> : <div className="h-16 w-16 bg-slate-200 rounded flex items-center justify-center text-slate-400 font-bold">LOGO</div>}
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Upload Company Logo</label>
-                                <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-sm text-slate-500" />
+                                <label className={`block text-xs font-bold uppercase mb-2 ${isUploadingLogo ? 'text-blue-500 animate-pulse' : 'text-slate-500'}`}>
+                                    {isUploadingLogo ? 'Uploading to Drive...' : 'Upload Company Logo'}
+                                </label>
+                                <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="text-sm text-slate-500 disabled:opacity-50" />
                             </div>
                         </div>
                     </Card>
