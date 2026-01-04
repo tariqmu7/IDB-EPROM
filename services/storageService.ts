@@ -381,13 +381,22 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     const base64 = await fileToBase64(file);
     const content = base64.split(',')[1];
     
-    // Provide both naming conventions to support various Google Apps Script implementations
+    const fileName = file.name || "uploaded_file";
+    const mimeType = file.type || "application/octet-stream";
+
+    // Provide various naming conventions to support unknown Google Apps Script implementations
+    // This payload sends aliases to ensure the script finds what it needs
     const payload = {
-      filename: file.name,
-      name: file.name,
-      mimeType: file.type,
-      type: file.type,
-      data: content
+      // Standard properties
+      filename: fileName,
+      name: fileName,
+      mimeType: mimeType,
+      type: mimeType,
+      
+      // Data fields
+      data: content,
+      base64: content,
+      file: content // Some scripts expect 'file'
     };
 
     // Use plain text content type to avoid complex CORS preflight issues
@@ -415,7 +424,12 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     }
 
     if (result.error) {
+        // If it's the Utilities.newBlob error, it usually means payload was missing data or mimeType was null
         throw new Error(result.error);
+    }
+
+    if (result.status === 'error') {
+       throw new Error(result.message || "Unknown server error");
     }
 
     // Check common property names for the URL
@@ -426,8 +440,8 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     }
 
     return fileUrl;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Upload failed", error);
-    throw error;
+    throw new Error(error.message || "Upload failed");
   }
 };
