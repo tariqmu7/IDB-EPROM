@@ -401,6 +401,8 @@ export const uploadToDrive = async (file: File): Promise<string> => {
       file: content // Some scripts expect 'file'
     };
 
+    console.log("Uploading file...", { fileName, mimeType, size: content.length });
+
     // Use plain text content type to avoid complex CORS preflight issues
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
@@ -425,13 +427,9 @@ export const uploadToDrive = async (file: File): Promise<string> => {
         throw new Error("Invalid response format from server. Check console.");
     }
 
-    if (result.error) {
-        // If it's the Utilities.newBlob error, it usually means payload was missing data or mimeType was null
-        throw new Error(result.error);
-    }
-
-    if (result.status === 'error') {
-       throw new Error(result.message || "Unknown server error");
+    // Handle both "error" (standard) and "message" (GAS default exception) fields
+    if (result.error || result.status === 'error') {
+        throw new Error(result.error || result.message || "Unknown server error");
     }
 
     // Check common property names for the URL
