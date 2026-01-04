@@ -294,6 +294,11 @@ export const updateUserRole = (userId: string, role: UserRole) => {
   }
 };
 
+export const deleteUser = (userId: string) => {
+  const users = getUsers().filter(u => u.id !== userId);
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+};
+
 export const loginUser = (username: string, password: string): User => {
   const users = getUsers();
   const user = users.find(u => u.username === username && u.password === password);

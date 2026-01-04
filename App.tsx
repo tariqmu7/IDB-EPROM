@@ -11,7 +11,7 @@ import { Content } from '@google/genai';
 interface AppContextType {
   user: User | null;
   settings: AppSettings;
-  login: (u: string, p: string) => Promise<void>;
+  login: (u: string, p: string) => Promise<UserRole>;
   logout: () => void;
   refreshSettings: () => void;
 }
@@ -111,21 +111,19 @@ const Navbar = () => {
           </div>
           
           <div className="flex-1 max-w-md px-8 flex items-center">
-            {user && (
-              <div className="relative w-full group">
-                <input 
-                    type="text" 
-                    placeholder="Search innovation registry..." 
-                    className="w-full bg-slate-100/50 border border-slate-200 rounded-full py-2 px-5 text-sm text-slate-800 focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder-slate-400"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={handleSearch}
-                />
-                <div className="absolute right-4 top-2.5 text-slate-400 group-focus-within:text-slate-900 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                </div>
+            <div className="relative w-full group">
+              <input 
+                  type="text" 
+                  placeholder="Search innovation registry..." 
+                  className="w-full bg-slate-100/50 border border-slate-200 rounded-full py-2 px-5 text-sm text-slate-800 focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder-slate-400"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={handleSearch}
+              />
+              <div className="absolute right-4 top-2.5 text-slate-400 group-focus-within:text-slate-900 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
               </div>
-            )}
+            </div>
           </div>
 
           <div className="flex items-center space-x-6">
@@ -143,7 +141,7 @@ const Navbar = () => {
                 )}
                 
                 {user.role === UserRole.ADMIN && (
-                   <Link to="/admin" className="text-slate-500 hover:text-red-600 transition-colors text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+                   <Link to="/admin" className="text-slate-900 hover:text-red-600 transition-colors text-xs font-bold uppercase tracking-widest flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                       Control Room
                    </Link>
@@ -318,10 +316,11 @@ const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(db.getCurrentUser());
   const [settings, setSettings] = useState<AppSettings>(db.getSettings());
 
-  const login = async (u: string, p: string) => {
+  const login = async (u: string, p: string): Promise<UserRole> => {
     await new Promise(resolve => setTimeout(resolve, 500));
     const loggedUser = db.loginUser(u, p);
     setUser(loggedUser);
+    return loggedUser.role;
   };
 
   const logout = () => {
@@ -372,6 +371,13 @@ const SharedIdeaPage = () => {
       }
     }
   }, [id]);
+
+  // PUBLIC ACCESS GUARD: If no user, check if public. If not public, redirect.
+  // Note: Guest users (UserRole.GUEST) can view everything, public can only view PUBLISHED.
+  const isPublic = idea?.status === IdeaStatus.PUBLISHED;
+  if (idea && !user && !isPublic) {
+    return <Navigate to="/auth" />;
+  }
 
   const handleAIEvaluation = async () => {
     if (!idea || !template?.ratingConfig) return;
@@ -480,7 +486,13 @@ const SharedIdeaPage = () => {
                 <span>{new Date(idea.createdAt).toLocaleDateString()}</span>
             </div>
           </div>
-          <Button variant="ghost" onClick={() => navigate(-1)} className="uppercase text-xs font-bold">Back to Dashboard</Button>
+          {user ? (
+            user.role !== UserRole.ADMIN ? 
+              <Button variant="ghost" onClick={() => navigate(-1)} className="uppercase text-xs font-bold">Back to Dashboard</Button> :
+              <Button variant="ghost" onClick={() => navigate('/admin')} className="uppercase text-xs font-bold">Return to Control Room</Button>
+          ) : (
+             <Link to="/auth"><Button variant="primary" className="text-xs uppercase">Login</Button></Link>
+          )}
        </div>
 
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -655,15 +667,19 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (user) {
+      // Security Check: Admins should not see dashboard, they have Control Room
+      if (user.role === UserRole.ADMIN) {
+        navigate('/admin');
+        return;
+      }
+
       const allIdeas = db.getIdeas();
       
       if (user.role === UserRole.EMPLOYEE) {
         setMyIdeas(allIdeas.filter(i => i.authorId === user.id));
       } else {
-        // Manager / Admin View
-        // Review Queue: Only SUBMITTED
+        // Manager View
         setReviewQueue(allIdeas.filter(i => i.status === IdeaStatus.SUBMITTED));
-        // Registry: Approved, Published, Rejected, Revision (Everything else)
         setRegistry(allIdeas.filter(i => i.status !== IdeaStatus.SUBMITTED && i.status !== IdeaStatus.DRAFT));
       }
     }
@@ -809,13 +825,6 @@ const CollaborationHub = () => {
     );
 };
 
-// ... (Keep SearchPage, LandingPage, AuthPage, IdeaFormPage, AdminPanel, ProtectedRoute, App)
-
-// Re-paste other components to ensure file is complete if strictly needed, but targeting changes is more efficient. 
-// Given the instruction to "Restore", I will assume standard components (SearchPage, LandingPage, AuthPage, IdeaFormPage, AdminPanel, ProtectedRoute, App) remain as provided in previous steps unless explicitly modified here.
-// However, to ensure valid XML output, I must provide the *entire* file content if I am replacing the file, OR I rely on the developer prompt understanding partial updates. 
-// The prompt says: "Full content of file_1". So I must include everything.
-
 const SearchPage = () => {
     const [searchParams] = useSearchParams();
     const query = searchParams.get('q') || '';
@@ -834,6 +843,7 @@ const SearchPage = () => {
             const isMine = user?.id === idea.authorId;
             const isPublic = idea.status === IdeaStatus.PUBLISHED;
             const isCollab = idea.status === IdeaStatus.APPROVED && (idea.dynamicData['collab'] || (idea as any).collaborationNeeded);
+            // Allow Guest to see Public
             const canSee = isMine || isPublic || isCollab || user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER || user?.role === UserRole.GUEST;
 
             if (!canSee) return false;
@@ -1012,7 +1022,13 @@ const AuthPage = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (user) navigate('/dashboard');
+    if (user) {
+        if (user.role === UserRole.ADMIN) {
+            navigate('/admin');
+        } else {
+            navigate('/dashboard');
+        }
+    }
   }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1020,8 +1036,12 @@ const AuthPage = () => {
     setError('');
     try {
       if (isLogin) {
-        await login(formData.username, formData.password);
-        navigate('/dashboard');
+        const role = await login(formData.username, formData.password);
+        if (role === UserRole.ADMIN) {
+            navigate('/admin');
+        } else {
+            navigate('/dashboard');
+        }
       } else {
         db.registerUser({
             username: formData.username,
@@ -1322,6 +1342,7 @@ const AdminPanel = () => {
     const refreshData = () => { setUsers(db.getUsers()); setTemplates(db.getTemplates()); };
     const handleUserApproval = (uid: string, role: UserRole) => { db.updateUserStatus(uid, UserStatus.ACTIVE, role); refreshData(); };
     const handleUserReject = (uid: string) => { db.updateUserStatus(uid, UserStatus.REJECTED); refreshData(); };
+    const handleDeleteUser = (uid: string) => { if(confirm("Are you sure? This cannot be undone.")) { db.deleteUser(uid); refreshData(); } };
     const handleRoleChange = (uid: string, newRole: UserRole) => { db.updateUserRole(uid, newRole); refreshData(); };
     const handleAddCategory = () => { if (newCat) { db.updateSettings({ ...settings, categories: [...settings.categories, newCat] }); refreshSettings(); setNewCat(''); } };
     const handleAddDept = () => { if (newDept) { db.updateSettings({ ...settings, departments: [...settings.departments, newDept] }); refreshSettings(); setNewDept(''); } };
@@ -1344,7 +1365,13 @@ const AdminPanel = () => {
             <td className="px-6 py-4 text-slate-600">{u.email}</td>
             <td className="px-6 py-4 text-slate-600">{u.department}</td>
             <td className="px-6 py-4"><select value={selectedRole} onChange={e => setSelectedRole(e.target.value as UserRole)} className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td>
-            <td className="px-6 py-4"><div className="flex space-x-2"><Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button><Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button></div></td>
+            <td className="px-6 py-4">
+                <div className="flex space-x-2">
+                    <Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button>
+                    <Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button>
+                    <Button variant="ghost" onClick={() => handleDeleteUser(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Delete</Button>
+                </div>
+            </td>
         </tr>
       );
     }
@@ -1359,7 +1386,7 @@ const AdminPanel = () => {
             </div>
             {activeTab === 'users' && (
                 <Card className="overflow-hidden border-none shadow-lg">
-                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div><span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span></div></td></tr>))}</tbody></table></div>
+                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div><span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span><button onClick={() => handleDeleteUser(u.id)} className="ml-2 text-red-400 hover:text-red-600"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>))}</tbody></table></div>
                 </Card>
             )}
             {activeTab === 'forms' && (
@@ -1393,11 +1420,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={<LandingPage />} />
               <Route path="/auth" element={<AuthPage />} />
-              <Route path="/view/:id" element={
-                 <ProtectedRoute>
-                    <SharedIdeaPage />
-                 </ProtectedRoute>
-              } />
+              <Route path="/view/:id" element={<SharedIdeaPage />} />
               <Route path="/search" element={<SearchPage />} />
               
               <Route path="/dashboard" element={
