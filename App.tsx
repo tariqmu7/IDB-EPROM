@@ -400,7 +400,15 @@ const SharedIdeaPage = () => {
     return totalWeight > 0 ? total / totalWeight : 0;
   };
 
-  const submitVerdict = (status: IdeaStatus) => {
+  const updateStatus = (status: IdeaStatus) => {
+      if(!idea) return;
+      const updatedIdea = { ...idea, status: status };
+      db.saveIdea(updatedIdea);
+      setIdea(updatedIdea);
+      alert(`Status updated to: ${status}`);
+  }
+
+  const submitEvaluation = (verdict: 'APPROVE' | 'REJECT' | 'REVISE') => {
     if (!idea || !user || !template) return;
 
     const weightedScore = calculateTotalScore();
@@ -423,25 +431,33 @@ const SharedIdeaPage = () => {
       createdAt: new Date().toISOString()
     };
 
-    const updatedIdea = { ...idea, status: status };
+    let newStatus = idea.status;
+    if(verdict === 'APPROVE') newStatus = IdeaStatus.APPROVED;
+    if(verdict === 'REVISE') newStatus = IdeaStatus.NEEDS_REVISION;
+    if(verdict === 'REJECT') newStatus = IdeaStatus.REJECTED;
+
+    const updatedIdea = { ...idea, status: newStatus };
     
-    if (status === IdeaStatus.APPROVED || status === IdeaStatus.PUBLISHED) {
-       updatedIdea.ratings = [...(idea.ratings || []), newRating];
-       updatedIdea.managerFeedback = evalComment; // Visible to employee
-    } else if (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED) {
-       updatedIdea.managerFeedback = evalComment;
+    // Append rating only on Approval or if strictly needed. 
+    // Usually we want to save the feedback regardless of verdict so employee sees it.
+    if (verdict === 'APPROVE') {
+        updatedIdea.ratings = [...(idea.ratings || []), newRating];
     }
+    updatedIdea.managerFeedback = evalComment;
 
     db.saveIdea(updatedIdea);
     setIdea(updatedIdea);
-    alert(`Protocol ${status === IdeaStatus.APPROVED ? 'APPROVED' : status === IdeaStatus.NEEDS_REVISION ? 'RETURNED FOR REVISION' : 'REJECTED'}`);
+    alert(`Protocol ${verdict}D`);
     navigate('/dashboard');
   };
 
   if (!idea) return <div className="text-center py-20">Idea not found.</div>;
 
   const isManager = user?.role === UserRole.MANAGER || user?.role === UserRole.ADMIN;
-  const isPending = idea.status === IdeaStatus.SUBMITTED;
+  
+  // Show Controls Logic
+  // Manager sees controls if Pending (Submitted) OR if they want to manage Published state
+  const isEvaluating = idea.status === IdeaStatus.SUBMITTED;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
@@ -449,7 +465,7 @@ const SharedIdeaPage = () => {
        <div className="flex justify-between items-start mb-8">
           <div>
             <div className="flex items-center gap-3 mb-2">
-               <Badge color={idea.status === IdeaStatus.PUBLISHED || idea.status === IdeaStatus.APPROVED ? 'green' : 'yellow'}>{idea.status}</Badge>
+               <Badge color={idea.status === IdeaStatus.PUBLISHED ? 'green' : idea.status === IdeaStatus.APPROVED ? 'blue' : idea.status === IdeaStatus.REJECTED ? 'red' : idea.status === IdeaStatus.NEEDS_REVISION ? 'amber' : 'gray'}>{idea.status}</Badge>
                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">{idea.category}</span>
             </div>
             <h1 className="text-4xl font-bold text-slate-900 leading-tight mb-2">{idea.title}</h1>
@@ -514,11 +530,11 @@ const SharedIdeaPage = () => {
 
           {/* Sidebar / Manager Console */}
           <div className="space-y-6">
-             {/* If Pending and Manager: Show Controls */}
-             {isManager && isPending && template?.ratingConfig ? (
+             {/* PHASE 1: EVALUATION (SUBMITTED -> APPROVED/REJECTED/REVISION) */}
+             {isManager && isEvaluating && template?.ratingConfig ? (
                 <Card className="p-6 border-l-4 border-l-indigo-600 shadow-xl bg-white sticky top-24">
                    <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Manager Console</h3>
+                      <h3 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Evaluation Console</h3>
                       <button onClick={handleAIEvaluation} disabled={isProcessing} className="text-[10px] font-bold uppercase bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded hover:bg-indigo-100 transition-colors flex items-center gap-2">
                          {isProcessing ? <span className="animate-spin">⚙️</span> : <span>✨ AI Auto-Grade</span>}
                       </button>
@@ -554,27 +570,48 @@ const SharedIdeaPage = () => {
                    </div>
 
                    <div className="grid grid-cols-1 gap-3">
-                      <Button onClick={() => submitVerdict(IdeaStatus.APPROVED)} className="w-full bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white">Approve & Publish</Button>
+                      <Button onClick={() => submitEvaluation('APPROVE')} className="w-full bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white">Approve (Internal)</Button>
                       <div className="grid grid-cols-2 gap-3">
-                         <Button onClick={() => submitVerdict(IdeaStatus.NEEDS_REVISION)} variant="secondary" className="text-xs">Request Revision</Button>
-                         <Button onClick={() => submitVerdict(IdeaStatus.REJECTED)} variant="danger" className="text-xs">Reject</Button>
+                         <Button onClick={() => submitEvaluation('REVISE')} variant="secondary" className="text-xs">Request Revision</Button>
+                         <Button onClick={() => submitEvaluation('REJECT')} variant="danger" className="text-xs">Reject</Button>
                       </div>
                    </div>
                 </Card>
              ) : (
-                /* Status / Feedback View */
-                <Card className="p-6 border-none shadow-md bg-slate-50">
-                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Current Status</h3>
+                /* PHASE 2: PUBLISHING / MANAGEMENT (APPROVED/PUBLISHED) or VIEW ONLY */
+                <Card className="p-6 border-none shadow-md bg-slate-50 sticky top-24">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Protocol Status</h3>
                    <div className="mb-6">
                       <div className={`text-xl font-bold mb-1 ${
-                         idea.status === IdeaStatus.APPROVED || idea.status === IdeaStatus.PUBLISHED ? 'text-emerald-600' :
+                         idea.status === IdeaStatus.PUBLISHED ? 'text-green-600' : 
+                         idea.status === IdeaStatus.APPROVED ? 'text-blue-600' :
                          idea.status === IdeaStatus.REJECTED ? 'text-red-600' : 
-                         idea.status === IdeaStatus.NEEDS_REVISION ? 'text-amber-600' : 'text-blue-600'
+                         idea.status === IdeaStatus.NEEDS_REVISION ? 'text-amber-600' : 'text-slate-600'
                       }`}>
                          {idea.status.replace('_', ' ')}
                       </div>
                       <div className="text-xs text-slate-500">Last updated {new Date(idea.updatedAt).toLocaleDateString()}</div>
                    </div>
+
+                   {/* Publishing Controls for Manager */}
+                   {isManager && (idea.status === IdeaStatus.APPROVED || idea.status === IdeaStatus.PUBLISHED) && (
+                       <div className="p-4 bg-white border border-slate-200 rounded mb-6">
+                           <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-3">Publishing Controls</h4>
+                           {idea.status === IdeaStatus.APPROVED && (
+                               <div className="space-y-2">
+                                   <p className="text-xs text-slate-500 mb-2">Protocol is approved internally. Publish to make it live for the organization?</p>
+                                   <Button onClick={() => updateStatus(IdeaStatus.PUBLISHED)} className="w-full bg-slate-900 text-white">Publish Live</Button>
+                                   <Button onClick={() => updateStatus(IdeaStatus.NEEDS_REVISION)} variant="secondary" className="w-full text-xs">Return for Revision</Button>
+                               </div>
+                           )}
+                           {idea.status === IdeaStatus.PUBLISHED && (
+                               <div className="space-y-2">
+                                   <p className="text-xs text-slate-500 mb-2">Protocol is live. Unpublish to hide it from the public registry?</p>
+                                   <Button onClick={() => updateStatus(IdeaStatus.APPROVED)} variant="secondary" className="w-full">Unpublish (Make Private)</Button>
+                               </div>
+                           )}
+                       </div>
+                   )}
 
                    {idea.ratings.length > 0 && (
                       <div className="mb-6 p-4 bg-white rounded border border-slate-200">
@@ -591,12 +628,13 @@ const SharedIdeaPage = () => {
                    )}
 
                    {idea.managerFeedback && !idea.ratings.length && (
-                      <div className="p-4 bg-amber-50 border border-amber-200 rounded text-amber-900 text-sm">
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded text-amber-900 text-sm mb-4">
                          <span className="block font-bold mb-1 uppercase text-xs">Manager Feedback:</span>
                          {idea.managerFeedback}
                       </div>
                    )}
                    
+                   {/* Employee Action: Resubmit */}
                    {(user?.id === idea.authorId) && (idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED) && (
                       <Button onClick={() => navigate('/submit', { state: { idea } })} className="w-full mt-4">Edit & Resubmit</Button>
                    )}
@@ -623,7 +661,9 @@ const Dashboard = () => {
         setMyIdeas(allIdeas.filter(i => i.authorId === user.id));
       } else {
         // Manager / Admin View
+        // Review Queue: Only SUBMITTED
         setReviewQueue(allIdeas.filter(i => i.status === IdeaStatus.SUBMITTED));
+        // Registry: Approved, Published, Rejected, Revision (Everything else)
         setRegistry(allIdeas.filter(i => i.status !== IdeaStatus.SUBMITTED && i.status !== IdeaStatus.DRAFT));
       }
     }
@@ -653,9 +693,9 @@ const Dashboard = () => {
                <div className="flex justify-between items-start mb-4">
                  <Badge color={
                    idea.status === IdeaStatus.PUBLISHED ? 'green' : 
-                   idea.status === IdeaStatus.APPROVED ? 'green' : 
+                   idea.status === IdeaStatus.APPROVED ? 'blue' : 
                    idea.status === IdeaStatus.REJECTED ? 'red' : 
-                   idea.status === IdeaStatus.SUBMITTED ? 'blue' : 'yellow'
+                   idea.status === IdeaStatus.SUBMITTED ? 'blue' : 'amber'
                  }>{idea.status}</Badge>
                  <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(idea.createdAt).toLocaleDateString()}</span>
                </div>
@@ -1104,6 +1144,8 @@ const IdeaFormPage = () => {
 
         const template = templates.find(t => t.id === templateId);
         let status = editingIdea?.status || IdeaStatus.SUBMITTED;
+        
+        // Employee Logic: If previously rejected or needs revision, reset to SUBMITTED so manager sees it in queue
         if (user.role === UserRole.EMPLOYEE && (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED || status === IdeaStatus.DRAFT)) {
             status = IdeaStatus.SUBMITTED;
         }
@@ -1127,7 +1169,8 @@ const IdeaFormPage = () => {
             status: status,
             ratings: editingIdea?.ratings || [],
             comments: editingIdea?.comments || [],
-            attachments: attachments
+            attachments: attachments,
+            managerFeedback: editingIdea?.managerFeedback // Preserve feedback history if desired, or clear it. Usually preserve until new status.
         };
 
         db.saveIdea(newIdea);
