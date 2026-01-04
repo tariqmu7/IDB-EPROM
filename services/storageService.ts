@@ -381,14 +381,16 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     const base64 = await fileToBase64(file);
     const content = base64.split(',')[1];
     
+    // Provide both naming conventions to support various Google Apps Script implementations
     const payload = {
       filename: file.name,
+      name: file.name,
       mimeType: file.type,
+      type: file.type,
       data: content
     };
 
-    // Use plain text content type to avoid complex CORS preflight issues on some network configurations
-    // The Google Script must be capable of parsing JSON from post body
+    // Use plain text content type to avoid complex CORS preflight issues
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
       headers: {
@@ -402,23 +404,28 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     }
 
     const text = await response.text();
+    console.log("Upload script response:", text); // Debug log
+
     let result;
     try {
         result = JSON.parse(text);
     } catch (e) {
         console.error("Invalid JSON response:", text);
-        throw new Error("Invalid response format from server.");
+        throw new Error("Invalid response format from server. Check console.");
     }
 
     if (result.error) {
         throw new Error(result.error);
     }
 
-    if (!result.url) {
-        throw new Error("No URL returned from upload script.");
+    // Check common property names for the URL
+    const fileUrl = result.url || result.fileUrl || result.link || result.downloadUrl;
+
+    if (!fileUrl) {
+        throw new Error("No URL returned from upload script. Response was: " + JSON.stringify(result));
     }
 
-    return result.url;
+    return fileUrl;
   } catch (error) {
     console.error("Upload failed", error);
     throw error;
