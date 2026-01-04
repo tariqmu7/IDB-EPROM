@@ -442,14 +442,15 @@ const SharedIdeaPage = () => {
     if(verdict === 'REVISE') newStatus = IdeaStatus.NEEDS_REVISION;
     if(verdict === 'REJECT') newStatus = IdeaStatus.REJECTED;
 
-    const updatedIdea = { ...idea, status: newStatus };
-    
-    // Append rating only on Approval or if strictly needed. 
-    // Usually we want to save the feedback regardless of verdict so employee sees it.
-    if (verdict === 'APPROVE') {
-        updatedIdea.ratings = [...(idea.ratings || []), newRating];
-    }
-    updatedIdea.managerFeedback = evalComment;
+    // Always log the rating regardless of the verdict
+    const updatedRatings = [...(idea.ratings || []), newRating];
+
+    const updatedIdea = { 
+        ...idea, 
+        status: newStatus,
+        ratings: updatedRatings,
+        managerFeedback: evalComment // Preserve quick access to feedback
+    };
 
     db.saveIdea(updatedIdea);
     setIdea(updatedIdea);
@@ -625,21 +626,51 @@ const SharedIdeaPage = () => {
                        </div>
                    )}
 
-                   {idea.ratings.length > 0 && (
-                      <div className="mb-6 p-4 bg-white rounded border border-slate-200">
-                         <div className="flex items-end justify-between mb-2">
-                            <span className="text-3xl font-black text-slate-900">{idea.ratings[0].grade}</span>
-                            <span className="text-sm font-bold text-slate-500">{idea.ratings[0].percentage}% Score</span>
-                         </div>
-                         <div className="w-full bg-slate-100 rounded-full h-2 mb-4">
-                            <div className="bg-slate-900 h-2 rounded-full" style={{width: `${idea.ratings[0].percentage}%`}}></div>
-                         </div>
-                         <p className="text-sm text-slate-600 italic">"{idea.ratings[0].comment}"</p>
-                         <div className="text-xs text-slate-400 mt-2 font-bold text-right">- {idea.ratings[0].managerName}</div>
+                   {/* Render All Ratings */}
+                   {idea.ratings && idea.ratings.length > 0 && (
+                      <div className="space-y-4 mb-6">
+                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Evaluation History</h4>
+                         {idea.ratings.slice().reverse().map((rating, index) => (
+                            <div key={index} className="p-4 bg-white rounded border border-slate-200 shadow-sm">
+                               <div className="flex justify-between items-start mb-3">
+                                  <div>
+                                     <div className="text-xs text-slate-400 font-bold uppercase mb-0.5">{new Date(rating.createdAt).toLocaleDateString()}</div>
+                                     <div className="font-bold text-slate-900 text-sm">{rating.managerName}</div>
+                                  </div>
+                                  <div className="text-right">
+                                     <span className={`text-xl font-black ${rating.grade >= 'D' ? 'text-red-600' : 'text-slate-900'}`}>{rating.grade}</span>
+                                     <span className="block text-[10px] font-bold text-slate-500">{rating.percentage}%</span>
+                                  </div>
+                               </div>
+                               
+                               {/* Scores Breakdown */}
+                               {rating.details && (
+                                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-4 bg-slate-50 p-2 rounded">
+                                       {rating.details.map((det, i) => {
+                                           // Attempt to find friendly name
+                                           const dimName = template?.ratingConfig?.find(c => c.id === det.dimensionId)?.name || det.dimensionId;
+                                           return (
+                                               <div key={i} className="flex justify-between items-center text-[10px]">
+                                                   <span className="text-slate-500 truncate max-w-[100px]" title={dimName}>{dimName}</span>
+                                                   <div className="flex gap-0.5">
+                                                       {[1,2,3,4,5].map(star => (
+                                                           <div key={star} className={`w-1.5 h-1.5 rounded-full ${star <= det.score ? 'bg-indigo-500' : 'bg-slate-200'}`}></div>
+                                                       ))}
+                                                   </div>
+                                               </div>
+                                           );
+                                       })}
+                                   </div>
+                               )}
+
+                               <p className="text-sm text-slate-600 italic border-l-2 border-indigo-100 pl-3">"{rating.comment}"</p>
+                            </div>
+                         ))}
                       </div>
                    )}
 
-                   {idea.managerFeedback && !idea.ratings.length && (
+                   {/* Fallback for old data: just Manager Feedback */}
+                   {idea.managerFeedback && (!idea.ratings || idea.ratings.length === 0) && (
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded text-amber-900 text-sm mb-4">
                          <span className="block font-bold mb-1 uppercase text-xs">Manager Feedback:</span>
                          {idea.managerFeedback}
