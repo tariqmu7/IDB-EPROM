@@ -638,6 +638,15 @@ const AuthPage = () => {
     }
   };
 
+  const handleGuestLogin = async () => {
+      try {
+          await login('guest', 'guest');
+          navigate('/dashboard');
+      } catch (err: any) {
+          setError("Guest login failed. Please contact admin.");
+      }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-md p-8 border-none shadow-2xl">
@@ -667,6 +676,12 @@ const AuthPage = () => {
           <Button type="submit" className="w-full shadow-lg mt-4">{isRegistering ? 'Submit Application' : 'Authenticate'}</Button>
         </form>
         
+        <div className="mt-4 text-center">
+            <button onClick={handleGuestLogin} className="text-xs uppercase font-bold text-slate-400 hover:text-slate-600 tracking-widest">
+                Continue as Guest
+            </button>
+        </div>
+
         <div className="mt-6 text-center">
             <button onClick={() => setIsRegistering(!isRegistering)} className="text-xs text-slate-400 hover:text-slate-900 underline underline-offset-4">
                 {isRegistering ? 'Back to Login' : 'Request Access / Register'}
@@ -927,113 +942,409 @@ const IdeaFormPage = () => {
     );
 };
 
-// 5. Admin Panel
+// 5. Admin / Control Room (Full Featured)
 const AdminPanel = () => {
-    const [users, setUsers] = useState<User[]>([]);
-    const [settings, setSettings] = useState<AppSettings>(db.getSettings());
+  const { settings, refreshSettings } = useAppContext();
+  const [users, setUsers] = useState<User[]>([]);
+  const [templates, setTemplates] = useState<FormTemplate[]>([]);
+  const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
+  
+  // Settings State
+  const [newCat, setNewCat] = useState('');
+  const [newDept, setNewDept] = useState('');
 
-    useEffect(() => {
-        setUsers(db.getUsers());
-    }, []);
+  // Form Builder State
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [newTemplateDesc, setNewTemplateDesc] = useState('');
+  const [newFields, setNewFields] = useState<FormField[]>([]);
+  const [editingField, setEditingField] = useState<Partial<FormField>>({});
 
-    const handleApprove = (userId: string) => {
-        db.updateUserStatus(userId, UserStatus.ACTIVE);
-        setUsers(db.getUsers());
+  // KPI Builder State
+  const DEFAULT_KPIS: RatingDimension[] = [
+    { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
+    { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation (resources, time).', weight: 20 },
+    { id: 'roi', name: 'Cost vs. Benefit', description: 'Estimated cost compared to expected benefits.', weight: 20 },
+    { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental improvement.', weight: 15 },
+    { id: 'risk', name: 'Risk Level', description: 'Operational, financial, or safety risks (High Score = Low Risk).', weight: 15 }
+  ];
+
+  const [currentKPIs, setCurrentKPIs] = useState<RatingDimension[]>(DEFAULT_KPIS);
+  const [newKPI, setNewKPI] = useState<Partial<RatingDimension>>({});
+
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const refreshData = () => {
+      setUsers(db.getUsers());
+      setTemplates(db.getTemplates());
+  };
+
+  // User Management
+  const handleUserApproval = (uid: string, role: UserRole) => {
+    db.updateUserStatus(uid, UserStatus.ACTIVE, role);
+    refreshData();
+  };
+
+  const handleUserReject = (uid: string) => {
+    db.updateUserStatus(uid, UserStatus.REJECTED);
+    refreshData();
+  };
+
+  const handleRoleChange = (uid: string, newRole: UserRole) => {
+    db.updateUserRole(uid, newRole);
+    refreshData();
+  };
+
+  // Settings Management
+  const handleAddCategory = () => {
+    if (newCat) {
+      db.updateSettings({ ...settings, categories: [...settings.categories, newCat] });
+      refreshSettings();
+      setNewCat('');
+    }
+  };
+  const handleAddDept = () => {
+    if (newDept) {
+      db.updateSettings({ ...settings, departments: [...settings.departments, newDept] });
+      refreshSettings();
+      setNewDept('');
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+        try {
+            const base64 = await db.fileToBase64(e.target.files[0]);
+            const newSettings = { ...settings, logoUrl: base64 };
+            db.updateSettings(newSettings);
+            refreshSettings();
+        } catch (err) {
+            alert("Logo upload failed");
+        }
+    }
+  };
+
+  // Form Builder Logic
+  const addFieldToTemplate = () => {
+      if(!editingField.label || !editingField.type) return;
+      
+      const newField: FormField = {
+          id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
+          label: editingField.label,
+          type: editingField.type as any,
+          required: editingField.required || false,
+          options: editingField.options ? (editingField.options as any).split(',') : undefined
+      };
+      setNewFields([...newFields, newField]);
+      setEditingField({});
+  };
+
+  const addKPI = () => {
+    if (!newKPI.name || !newKPI.weight) return;
+    const k: RatingDimension = {
+        id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15),
+        name: newKPI.name,
+        description: newKPI.description || '',
+        weight: Number(newKPI.weight)
     };
+    setCurrentKPIs([...currentKPIs, k]);
+    setNewKPI({});
+  };
 
-    const handleReject = (userId: string) => {
-        db.updateUserStatus(userId, UserStatus.REJECTED);
-        setUsers(db.getUsers());
-    };
+  const removeKPI = (id: string) => {
+      setCurrentKPIs(currentKPIs.filter(k => k.id !== id));
+  };
+  
+  const resetKPIs = () => setCurrentKPIs(DEFAULT_KPIS);
+  const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
 
-    const handleRoleChange = (userId: string, role: UserRole) => {
-        db.updateUserRole(userId, role);
-        setUsers(db.getUsers());
-    };
+  const saveTemplate = () => {
+      if(!newTemplateName || newFields.length === 0) return;
+      
+      const t: FormTemplate = {
+          id: Date.now().toString(),
+          name: newTemplateName,
+          description: newTemplateDesc,
+          fields: newFields,
+          ratingConfig: currentKPIs, // Use the custom KPIs
+          isActive: true
+      };
+      db.saveTemplate(t);
+      setNewTemplateName('');
+      setNewTemplateDesc('');
+      setNewFields([]);
+      setCurrentKPIs(DEFAULT_KPIS); // Reset to defaults for next
+      refreshData();
+  };
+  
+  const deleteTemplate = (id: string) => {
+      db.deleteTemplate(id);
+      refreshData();
+  }
 
-    return (
-        <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-             <div className="mb-8 border-b border-slate-200 pb-4">
-                <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                    <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
-                    Control Room
-                </h1>
-                <p className="text-slate-500 mt-1">System Administration & User Access Control</p>
-             </div>
+  // Helper for pending user row
+  const PendingUserRow = ({ u }: { u: User }) => {
+      const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
+      return (
+        <tr className="hover:bg-amber-50 transition-colors bg-amber-50 border-l-4 border-amber-400">
+            <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
+            <td className="px-6 py-4 text-slate-600">{u.email}</td>
+            <td className="px-6 py-4 text-slate-600">{u.department}</td>
+            <td className="px-6 py-4">
+                <select 
+                    value={selectedRole} 
+                    onChange={e => setSelectedRole(e.target.value as UserRole)}
+                    className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"
+                >
+                    <option value={UserRole.EMPLOYEE}>Employee</option>
+                    <option value={UserRole.MANAGER}>Manager</option>
+                    <option value={UserRole.ADMIN}>Admin</option>
+                </select>
+            </td>
+            <td className="px-6 py-4">
+                <div className="flex space-x-2">
+                    <Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button>
+                    <Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button>
+                </div>
+            </td>
+        </tr>
+      );
+  }
 
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                 {/* User Management */}
-                 <div className="lg:col-span-2 space-y-6">
-                     <Card className="p-6 border-none shadow-lg">
-                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">User Registry</h3>
-                         <div className="overflow-x-auto">
-                             <table className="w-full text-left border-collapse">
-                                 <thead>
-                                     <tr className="text-[10px] uppercase text-slate-400 border-b border-slate-100">
-                                         <th className="pb-3 pl-2">User</th>
-                                         <th className="pb-3">Role</th>
-                                         <th className="pb-3">Status</th>
-                                         <th className="pb-3 text-right">Actions</th>
-                                     </tr>
-                                 </thead>
-                                 <tbody className="text-sm">
-                                     {users.map(u => (
-                                         <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                                             <td className="py-4 pl-2 font-medium">
-                                                 <div className="text-slate-900">{u.username}</div>
-                                                 <div className="text-xs text-slate-400">{u.email}</div>
-                                             </td>
-                                             <td className="py-4">
-                                                 <select 
-                                                    value={u.role} 
-                                                    onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
-                                                    className="bg-transparent border-none text-xs font-bold uppercase focus:ring-0 cursor-pointer"
-                                                 >
-                                                     {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
-                                                 </select>
-                                             </td>
-                                             <td className="py-4">
-                                                 <Badge color={u.status === UserStatus.ACTIVE ? 'green' : u.status === UserStatus.PENDING ? 'yellow' : 'red'}>{u.status}</Badge>
-                                             </td>
-                                             <td className="py-4 text-right space-x-2">
-                                                 {u.status === UserStatus.PENDING && (
-                                                     <>
-                                                        <button onClick={() => handleApprove(u.id)} className="text-[10px] uppercase font-bold text-green-600 hover:text-green-800">Approve</button>
-                                                        <button onClick={() => handleReject(u.id)} className="text-[10px] uppercase font-bold text-red-600 hover:text-red-800">Reject</button>
-                                                     </>
-                                                 )}
-                                             </td>
-                                         </tr>
-                                     ))}
-                                 </tbody>
-                             </table>
-                         </div>
-                     </Card>
-                 </div>
-
-                 {/* System Stats / Quick Config */}
-                 <div className="space-y-6">
-                     <Card className="p-6 border-none shadow-lg bg-slate-900 text-white">
-                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">System Status</h3>
-                         <div className="space-y-4">
-                             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                 <span className="text-xs text-slate-400">Total Users</span>
-                                 <span className="font-bold font-mono">{users.length}</span>
-                             </div>
-                             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                 <span className="text-xs text-slate-400">Pending Approvals</span>
-                                 <span className="font-bold font-mono text-yellow-400">{users.filter(u => u.status === UserStatus.PENDING).length}</span>
-                             </div>
-                             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                                 <span className="text-xs text-slate-400">Version</span>
-                                 <span className="font-bold font-mono">v2.4.0</span>
-                             </div>
-                         </div>
-                     </Card>
-                 </div>
-             </div>
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Control Room</h1>
+        <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+            <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Admin Privileges Active</span>
         </div>
-    );
+      </div>
+      
+      <div className="flex space-x-8 mb-10 border-b border-slate-200">
+        <button onClick={() => setActiveTab('users')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'users' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+            Personnel
+            {activeTab === 'users' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
+        </button>
+        <button onClick={() => setActiveTab('forms')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'forms' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+            Protocol Builder
+            {activeTab === 'forms' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
+        </button>
+        <button onClick={() => setActiveTab('settings')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'settings' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+            System Config
+            {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
+        </button>
+      </div>
+
+      {activeTab === 'users' && (
+        <Card className="overflow-hidden border-none shadow-lg">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider">
+                <tr>
+                  <th className="px-6 py-4">Username</th>
+                  <th className="px-6 py-4">Email</th>
+                  <th className="px-6 py-4">Department</th>
+                  <th className="px-6 py-4">Role</th>
+                  <th className="px-6 py-4">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {users.filter(u => u.status === UserStatus.PENDING).map(u => (
+                    <PendingUserRow key={u.id} u={u} />
+                ))}
+                {users.filter(u => u.status === UserStatus.ACTIVE).map(u => (
+                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
+                    <td className="px-6 py-4">{u.email}</td>
+                    <td className="px-6 py-4">{u.department}</td>
+                    <td className="px-6 py-4">
+                        <select 
+                            value={u.role} 
+                            onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
+                            className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"
+                        >
+                             <option value={UserRole.EMPLOYEE}>Employee</option>
+                             <option value={UserRole.MANAGER}>Manager</option>
+                             <option value={UserRole.ADMIN}>Admin</option>
+                             <option value={UserRole.GUEST}>Guest</option>
+                        </select>
+                    </td>
+                    <td className="px-6 py-4">
+                        <div className="flex items-center">
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
+                            <span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span>
+                        </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {activeTab === 'forms' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* List of Templates */}
+              <div className="lg:col-span-1 space-y-4">
+                  <h3 className="text-lg font-bold text-slate-900 mb-4 uppercase tracking-wide">Active Protocols</h3>
+                  {templates.map(t => (
+                      <Card key={t.id} className="p-5 border-l-4 border-l-slate-900 transition-all bg-white hover:shadow-lg cursor-pointer">
+                          <div className="flex justify-between items-start">
+                              <div>
+                                  <div className="font-bold text-slate-900 text-sm">{t.name}</div>
+                                  <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{t.fields.length} Data Points</div>
+                                  <div className="text-[10px] text-slate-900 mt-2 font-bold uppercase">
+                                      {t.ratingConfig ? `${t.ratingConfig.length} Evaluators` : 'Default KPIs'}
+                                  </div>
+                              </div>
+                              <button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button>
+                          </div>
+                      </Card>
+                  ))}
+              </div>
+
+              {/* Builder */}
+              <Card className="lg:col-span-2 p-8 border-none shadow-lg">
+                  <h3 className="text-lg font-bold text-slate-900 mb-8 uppercase tracking-wide flex items-center">
+                      <span className="w-2 h-2 bg-slate-900 rounded-full mr-3"></span>
+                      New Protocol Configuration
+                  </h3>
+                  {/* ... (Builder Fields code remains similar but refined) ... */}
+                  <div className="mb-8 grid grid-cols-2 gap-6">
+                      <Input label="Protocol Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" />
+                      <Input label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Short operational summary..." />
+                  </div>
+
+                  {/* Field Builder */}
+                  <div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8">
+                      <h4 className="text-xs font-bold text-slate-900 mb-6 uppercase tracking-widest border-b border-slate-200 pb-2">01 // Data Structure</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                          <Input label="Field Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} placeholder="Label" />
+                          <div className="mb-5">
+                              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Data Type</label>
+                              <select 
+                                value={editingField.type || ''} 
+                                onChange={e => setEditingField({...editingField, type: e.target.value as any})}
+                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 appearance-none input-base"
+                              >
+                                  <option value="">Select Type</option>
+                                  <option value="text">Short Text</option>
+                                  <option value="textarea">Long Text</option>
+                                  <option value="number">Numeric</option>
+                                  <option value="select">Selector</option>
+                                  <option value="checkbox">Boolean</option>
+                                  <option value="date">Date</option>
+                              </select>
+                          </div>
+                          {editingField.type === 'select' && (
+                             <Input label="Options (CSV)" value={editingField.options as any || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} placeholder="A, B, C" />
+                          )}
+                          <div className="mb-5 flex items-center h-10 bg-white px-3 rounded border border-slate-300">
+                              <input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-3 text-slate-900 bg-slate-100 border-slate-300 rounded" />
+                              <span className="text-xs text-slate-500 uppercase font-bold">Required</span>
+                          </div>
+                      </div>
+                      <Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>
+                      
+                      {newFields.length > 0 && (
+                        <div className="mt-6 space-y-2">
+                            {newFields.map((f, idx) => (
+                                <div key={idx} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
+                                    <span><span className="font-bold text-slate-900 uppercase">{f.label}</span> <span className="text-slate-500 ml-2">[{f.type}]</span></span>
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold">{f.required ? 'REQ' : 'OPT'}</span>
+                                </div>
+                            ))}
+                        </div>
+                      )}
+                  </div>
+
+                  {/* KPI Builder */}
+                  <div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8">
+                      <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-2">
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">02 // Evaluation Metrics</h4>
+                        <div className={`text-xs font-bold uppercase tracking-wide ${totalWeight === 100 ? 'text-emerald-600' : 'text-red-500'}`}>Total Weight: {totalWeight}%</div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end mb-6">
+                           <Input label="Metric Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} placeholder="e.g. ROI" />
+                           <Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} placeholder="Context" />
+                           <Input label="Weight (%)" type="number" value={newKPI.weight || ''} onChange={e => setNewKPI({...newKPI, weight: Number(e.target.value)})} placeholder="20" />
+                           <Button onClick={addKPI} className="mb-5 bg-white hover:bg-slate-100 border-slate-300 text-slate-600">Add Metric</Button>
+                      </div>
+
+                      <div className="space-y-2">
+                          {currentKPIs.map(kpi => (
+                              <div key={kpi.id} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
+                                  <div className="flex-1">
+                                      <span className="font-bold text-slate-800 mr-3 uppercase">{kpi.name}</span>
+                                      <span className="text-slate-500">{kpi.description}</span>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                      <Badge color="blue">{kpi.weight}%</Badge>
+                                      <button onClick={() => removeKPI(kpi.id)} className="text-red-500 hover:text-red-700 transition-colors uppercase font-bold text-[10px]">Remove</button>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                      
+                      <div className="mt-6 text-right">
+                          <button onClick={resetKPIs} className="text-[10px] text-slate-900 hover:text-slate-600 uppercase font-bold tracking-wider">Reset Defaults</button>
+                      </div>
+                  </div>
+                  
+                  <div className="flex justify-end pt-6 border-t border-slate-200">
+                      <Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>Deploy Protocol</Button>
+                  </div>
+              </Card>
+          </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+           <Card className="p-8 border-none shadow-lg">
+              <h3 className="font-bold text-lg mb-6 text-slate-900 uppercase tracking-wide">System Definitions</h3>
+              
+              {/* Branding Section */}
+              <div className="mb-8 p-6 bg-slate-50 rounded border border-slate-200">
+                 <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Brand Identity (Logo)</label>
+                 <div className="flex items-center gap-4">
+                    {settings.logoUrl && (
+                        <div className="w-16 h-16 bg-white border border-slate-200 rounded flex items-center justify-center p-2">
+                            <img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                        </div>
+                    )}
+                    <input type="file" onChange={handleLogoUpload} accept="image/*" className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-bold file:uppercase file:bg-slate-900 file:text-white hover:file:bg-slate-800 transition-colors"/>
+                 </div>
+              </div>
+
+              <div className="mb-8">
+                <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Operational Categories</label>
+                <div className="flex gap-3 mb-4">
+                  <Input placeholder="New Category" value={newCat} onChange={e => setNewCat(e.target.value)} className="mb-0 flex-1" />
+                  <Button onClick={handleAddCategory} className="whitespace-nowrap px-6">Add</Button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {settings.categories.map(c => <Badge key={c} color="gray">{c}</Badge>)}
+                </div>
+              </div>
+              <div className="pt-6 border-t border-slate-200">
+                <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Organization Units</label>
+                 <div className="flex gap-3 mb-4">
+                  <Input placeholder="New Department" value={newDept} onChange={e => setNewDept(e.target.value)} className="mb-0 flex-1" />
+                  <Button onClick={handleAddDept} className="whitespace-nowrap px-6">Add</Button>
+                </div>
+                 <div className="flex flex-wrap gap-2">
+                  {settings.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}
+                </div>
+              </div>
+           </Card>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // 6. Collaboration Hub
