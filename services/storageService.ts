@@ -19,7 +19,9 @@ const STORAGE_KEYS = {
   TEMPLATES: 'eprom_templates'
 };
 
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywVx70i2DXMf90cuMkE84Jn3rNlIr6dQJwXdoVx7l9kzzSXU-9uxn1MnrbWnJRRu6b/exec";
+// IMPORTANT: Replace this with your NEW Web App URL if you created a new deployment.
+// If you updated the existing deployment version, you can keep this.
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJVxDjDdEQhLaj0m2zh0yMpowpuomeH97-wAHRXfodW-zY2MIU54jQtZCC4Lfb2UxW/exec";
 
 // Initial Data Seeding
 const seedData = () => {
