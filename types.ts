@@ -28,7 +28,8 @@ export enum IdeaStatus {
   NEEDS_REVISION = 'NEEDS_REVISION',
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
-  PUBLISHED = 'PUBLISHED'
+  PUBLISHED = 'PUBLISHED',
+  ARCHIVED = 'ARCHIVED'
 }
 
 // Dynamic Form Definitions

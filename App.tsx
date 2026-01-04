@@ -1349,72 +1349,58 @@ const AdminPanel = () => {
 
 // 6. Collaboration Hub
 const CollaborationHub = () => {
+    const { user } = useAppContext();
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
     const navigate = useNavigate();
 
     useEffect(() => {
         const all = db.getIdeas();
         const filtered = all.filter(i => 
-            (i.dynamicData['collab'] === true || (i as any).collaborationNeeded) && 
-            !i.parentIdeaId &&
-            (i.status === IdeaStatus.APPROVED || i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.SUBMITTED)
+            (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) &&
+            (i.dynamicData?.collab === true || (i as any).collaborationNeeded === true)
         );
         setCollabIdeas(filtered);
     }, []);
 
-    const handleContribute = (idea: Idea) => {
+    const handleJoin = (idea: Idea) => {
         navigate('/submit', { state: { parentIdea: idea } });
     };
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-            <h1 className="text-4xl font-bold text-slate-900 mb-3 tracking-tight">Collaboration Hub</h1>
-            <p className="text-slate-500 mb-12 text-lg font-medium">Cross-functional synergy initiatives.</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {collabIdeas.map(idea => (
-                    <Card key={idea.id} className={`transition-all hover:shadow-2xl hover:scale-[1.01] duration-300 relative overflow-hidden rounded-xl ${idea.coverImage ? 'bg-slate-900 border-none' : 'p-8 border-l-4 border-l-slate-900 bg-white'}`}>
-                        {idea.coverImage && (
-                            <>
-                                <div className="absolute inset-0 z-0 bg-slate-950">
-                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 hover:scale-105 opacity-50" />
-                                </div>
-                                <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-black/40" />
-                            </>
-                        )}
-
-                        <div className={`relative z-10 ${idea.coverImage ? 'p-8' : ''}`}>
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <Badge color="amber" className={`${idea.coverImage ? 'bg-amber-500/20 text-amber-100 border-amber-500/30' : ''}`}>Open For Collab</Badge>
-                                    <h3 className={`text-2xl font-bold mt-3 leading-tight ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-900'}`}>{idea.title}</h3>
-                                </div>
-                            </div>
-                            <p className={`text-sm mb-8 line-clamp-3 leading-relaxed ${idea.coverImage ? 'text-slate-300 font-medium drop-shadow-md' : 'text-slate-500'}`}>{idea.description}</p>
-                            
-                            <div className={`${idea.coverImage ? 'bg-white/10 border-white/20' : 'bg-slate-50 border-slate-100'} p-5 rounded border mb-6 backdrop-blur-sm`}>
-                                <div className={`text-[10px] font-bold uppercase mb-3 tracking-widest ${idea.coverImage ? 'text-slate-300' : 'text-slate-400'}`}>Skill Requirements</div>
-                                <div className="flex flex-wrap gap-2">
-                                    {idea.tags?.map(t => <Badge key={t} color="gray" className={idea.coverImage ? 'bg-white/20 text-white border-transparent' : ''}>{t}</Badge>)}
-                                    {(!idea.tags || idea.tags.length === 0) && <span className="text-slate-400 text-xs italic">General Engineering</span>}
-                                </div>
-                            </div>
-
-                            <div className={`flex justify-between items-center mt-6 pt-6 border-t ${idea.coverImage ? 'border-white/10' : 'border-slate-100'}`}>
-                                <div className={`text-xs uppercase tracking-wide ${idea.coverImage ? 'text-slate-400' : 'text-slate-500'}`}>
-                                    Lead: <span className={`font-bold ${idea.coverImage ? 'text-white' : 'text-slate-900'}`}>{idea.authorName}</span>
-                                </div>
-                                <Button variant="secondary" onClick={() => handleContribute(idea)} className="text-xs uppercase border-slate-300 !text-black font-black hover:bg-slate-50 shadow-lg tracking-widest">Join Project</Button>
-                            </div>
-                        </div>
-                    </Card>
-                ))}
-                {collabIdeas.length === 0 && (
-                    <div className="col-span-full text-center py-20 bg-slate-50 rounded border border-dashed border-slate-200">
-                        <p className="text-slate-400 uppercase tracking-widest text-xs">No active collaboration requests.</p>
-                    </div>
-                )}
+            <div className="mb-10 border-b border-slate-200 pb-4">
+                <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Collaboration Hub</h1>
+                <p className="text-slate-500 text-sm mt-1 font-medium">Join forces on active initiatives needing cross-functional expertise.</p>
             </div>
+
+            {collabIdeas.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <p className="text-slate-400 uppercase tracking-widest text-sm">No active collaboration requests.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {collabIdeas.map(idea => (
+                         <Card key={idea.id} className="flex flex-col h-full hover:border-blue-300 transition-colors border-l-4 border-l-blue-500 bg-white p-6 shadow-md">
+                             <div className="flex-1">
+                                 <div className="flex items-center justify-between mb-4">
+                                     <Badge color="blue">{idea.department}</Badge>
+                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(idea.createdAt).toLocaleDateString()}</span>
+                                 </div>
+                                 <h3 className="text-xl font-bold text-slate-900 mb-2">{idea.title}</h3>
+                                 <p className="text-sm text-slate-600 line-clamp-3 mb-4">{idea.description}</p>
+                                 
+                                 <div className="bg-slate-50 p-3 rounded text-xs border border-slate-100 mb-4">
+                                     <span className="font-bold text-slate-700 block mb-1 uppercase text-[10px]">Author</span>
+                                     <span className="text-slate-600">{idea.authorName}</span>
+                                 </div>
+                             </div>
+                             <div className="pt-0 mt-auto">
+                                 <Button onClick={() => handleJoin(idea)} variant="secondary" className="w-full text-xs uppercase border-blue-200 text-blue-700 hover:bg-blue-50">Contribute / Join</Button>
+                             </div>
+                        </Card>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
@@ -1466,7 +1452,7 @@ const Dashboard = () => {
       // Fallback if template deleted or legacy idea
       if(!template || !template.ratingConfig) {
           return [
-            { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue.', weight: 30 },
+            { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
             { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation.', weight: 20 },
             { id: 'roi', name: 'Cost vs. Benefit', description: 'ROI.', weight: 20 },
             { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental.', weight: 15 },
@@ -1547,6 +1533,7 @@ const Dashboard = () => {
       case IdeaStatus.APPROVED: return 'blue';
       case IdeaStatus.REJECTED: return 'red';
       case IdeaStatus.NEEDS_REVISION: return 'amber';
+      case IdeaStatus.ARCHIVED: return 'gray';
       default: return 'gray';
     }
   };
@@ -1559,7 +1546,7 @@ const Dashboard = () => {
       const isDark = !!idea.coverImage;
       const textClass = isDark ? 'text-slate-300 drop-shadow-sm' : 'text-slate-500';
       const labelClass = isDark ? 'text-slate-400' : 'text-slate-400';
-      const bgClass = isDark ? 'bg-white/10 border-white/10 backdrop-blur' : 'bg-slate-50 border-slate-200';
+      const bgClass = isDark ? 'bg-white/10 border-white/10 backdrop-blur-sm' : 'bg-slate-50 border-slate-200';
 
       return (
          <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 text-xs mb-6 p-5 rounded border ${bgClass} ${textClass}`}>
@@ -1635,36 +1622,38 @@ const Dashboard = () => {
         )}
       </div>
 
-      <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {ideas.map(idea => (
-          <Card key={idea.id} className={`transition-all hover:border-slate-300 relative overflow-hidden ${idea.parentIdeaId ? 'border-l-4 border-l-purple-500' : ''} ${idea.coverImage ? 'bg-slate-900 border-none' : 'p-8'}`}>
+          <Card key={idea.id} className={`h-full flex flex-col transition-all hover:border-slate-300 relative overflow-hidden ${idea.parentIdeaId ? 'border-l-4 border-l-purple-500' : ''} ${idea.coverImage ? 'bg-slate-950 border-none' : 'p-8'}`}>
             {idea.coverImage && (
                 <>
                     <div className="absolute inset-0 z-0 bg-slate-950">
-                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-50" />
+                         {/* Reduced opacity to 30% for darker background */}
+                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-30" />
                     </div>
-                    <div className="absolute inset-0 z-0 bg-gradient-to-r from-black via-black/90 to-black/40" />
+                    {/* Stronger gradient overlay for better text contrast */}
+                    <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/90 to-black/60" />
                 </>
             )}
 
-            <div className={`relative z-10 flex flex-col md:flex-row justify-between md:items-start gap-8 ${idea.coverImage ? 'p-8' : ''}`}>
-              <div className="flex-1">
-                 <div className="flex items-center gap-4 mb-4 flex-wrap">
-                    <h3 className={`text-2xl font-bold tracking-tight ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-900'}`}>{idea.title}</h3>
+            <div className={`relative z-10 flex-1 flex flex-col justify-between ${idea.coverImage ? 'p-8' : ''}`}>
+              <div className="flex-1 mb-6">
+                 <div className="flex items-center gap-3 mb-4 flex-wrap">
+                    <h3 className={`text-2xl font-bold tracking-tight leading-tight ${idea.coverImage ? 'text-white drop-shadow-md' : 'text-slate-900'}`}>{idea.title}</h3>
                     <Badge color={getStatusColor(idea.status)}>{idea.status}</Badge>
-                    <Badge color="gray" className={idea.coverImage ? 'bg-white/20 text-white border-none' : ''}>{idea.category}</Badge>
+                    <Badge color="gray" className={idea.coverImage ? 'bg-white/10 text-white border-white/20 backdrop-blur-sm' : ''}>{idea.category}</Badge>
                     {idea.parentIdeaId && <Badge color="amber">Linked</Badge>}
                  </div>
-                 <p className={`mb-8 leading-relaxed font-medium text-lg ${idea.coverImage ? 'text-slate-300 drop-shadow-md' : 'text-slate-600'}`}>{idea.description}</p>
+                 <p className={`mb-6 leading-relaxed font-medium text-sm ${idea.coverImage ? 'text-slate-300 drop-shadow-sm' : 'text-slate-600'}`}>{idea.description}</p>
                  
                  {renderDynamicSummary(idea)}
 
                  {/* Ratings Display */}
                  {idea.ratings.length > 0 && (
-                   <div className={`p-6 rounded border mb-4 shadow-sm ${idea.coverImage ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'}`}>
+                   <div className={`p-5 rounded border mb-4 shadow-sm ${idea.coverImage ? 'bg-white/5 border-white/10' : 'bg-white border-slate-200'}`}>
                      <p className="text-[10px] font-bold uppercase text-slate-400 mb-4 tracking-widest">Performance Metrics</p>
                      {idea.ratings.map((r, idx) => (
-                       <div key={idx} className={`mb-4 pb-4 border-b last:border-0 last:pb-0 ${idea.coverImage ? 'border-white/10' : 'border-slate-100'}`}>
+                       <div key={idx} className={`mb-4 last:mb-0 border-b last:border-0 pb-4 last:pb-0 ${idea.coverImage ? 'border-white/10' : 'border-slate-100'}`}>
                          <div className="flex justify-between items-center mb-2">
                             <span className={`font-bold text-sm ${idea.coverImage ? 'text-slate-200' : 'text-slate-700'}`}>{r.managerName}</span>
                             <div className="flex items-center gap-3">
@@ -1676,15 +1665,15 @@ const Dashboard = () => {
                                 }`}>Grade {r.grade}</span>
                             </div>
                          </div>
-                         <p className="text-sm text-slate-500 italic">"{r.comment}"</p>
+                         <p className="text-xs text-slate-500 italic line-clamp-2">"{r.comment}"</p>
                        </div>
                      ))}
                    </div>
                  )}
               </div>
 
-              {/* Actions Area */}
-              <div className="flex flex-row md:flex-col gap-3 min-w-[160px]">
+              {/* Actions Area - Stacked vertically for grid layout */}
+              <div className="flex flex-col gap-2 pt-4 border-t border-slate-200/10">
                 {/* External Share Button for Everyone if active */}
                 <Button variant="ghost" className={`w-full text-xs uppercase font-bold border ${idea.coverImage ? 'text-slate-300 border-slate-600 hover:text-white hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:text-slate-900'}`} onClick={() => copyShareLink(idea.id)}>Get Link</Button>
 
@@ -1706,23 +1695,44 @@ const Dashboard = () => {
                      {/* Manager actions for PUBLISHED ideas (Revert/Reject) */}
                      {idea.status === IdeaStatus.PUBLISHED && (
                         <div className="flex flex-col gap-2">
-                            <Button variant="secondary" className="w-full text-xs uppercase border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleStatusChange(idea, IdeaStatus.APPROVED)}>Unpublish</Button>
-                            <Button variant="danger" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.REJECTED)}>Reject</Button>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button variant="secondary" className="w-full text-xs uppercase border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleStatusChange(idea, IdeaStatus.APPROVED)}>Unpublish</Button>
+                                <Button variant="danger" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.REJECTED)}>Reject</Button>
+                            </div>
                             <Button variant="ghost" className={`w-full text-xs uppercase ${idea.coverImage ? 'text-slate-300 hover:bg-white/10' : ''}`} onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Send to Revision</Button>
                         </div>
                      )}
 
-                     <Button variant="ghost" className={`w-full text-xs uppercase border ${idea.coverImage ? 'border-slate-600 text-slate-300 hover:text-white' : 'border-slate-200 text-slate-600'}`} onClick={() => {
-                         setSelectedIdea(idea);
-                         // Pre-fill rating details with existing or 1s
-                         const existing = idea.ratings.find(r => r.managerId === user.id);
-                         const initialDetails: Record<string, number> = {};
-                         getCurrentKPIs(idea).forEach(k => {
-                             initialDetails[k.id] = existing ? (existing.details.find(d => d.dimensionId === k.id)?.score || 1) : 3; // Default to 3 (Average)
-                         });
-                         setRatingDetails(initialDetails);
-                         setRatingComment(existing?.comment || '');
-                     }}>Evaluate</Button>
+                     {/* Manager actions for REJECTED ideas */}
+                     {idea.status === IdeaStatus.REJECTED && (
+                        <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-slate-100/10">
+                            <div className="text-[10px] font-bold text-red-500 uppercase tracking-widest text-center mb-1">REJECTED OPTIONS</div>
+                            <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Request Revision</Button>
+                            <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.SUBMITTED)}>Un-Reject (Re-open)</Button>
+                            <Button variant="ghost" className="w-full text-xs uppercase text-slate-400 hover:text-slate-600" onClick={() => handleStatusChange(idea, IdeaStatus.ARCHIVED)}>Archive Record</Button>
+                        </div>
+                     )}
+                     
+                     {/* Manager actions for ARCHIVED ideas */}
+                     {idea.status === IdeaStatus.ARCHIVED && (
+                        <div className="flex flex-col gap-2">
+                             <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.SUBMITTED)}>Restore from Archive</Button>
+                        </div>
+                     )}
+
+                     {/* Evaluate button logic */}
+                     {idea.status !== IdeaStatus.ARCHIVED && idea.status !== IdeaStatus.REJECTED && (
+                        <Button variant="ghost" className={`w-full text-xs uppercase border ${idea.coverImage ? 'border-slate-600 text-slate-300 hover:text-white' : 'border-slate-200 text-slate-600'}`} onClick={() => {
+                            setSelectedIdea(idea);
+                            const existing = idea.ratings.find(r => r.managerId === user.id);
+                            const initialDetails: Record<string, number> = {};
+                            getCurrentKPIs(idea).forEach(k => {
+                                initialDetails[k.id] = existing ? (existing.details.find(d => d.dimensionId === k.id)?.score || 1) : 3; 
+                            });
+                            setRatingDetails(initialDetails);
+                            setRatingComment(existing?.comment || '');
+                        }}>Evaluate</Button>
+                     )}
                    </>
                 )}
 
@@ -1734,7 +1744,7 @@ const Dashboard = () => {
             </div>
           </Card>
         ))}
-        {ideas.length === 0 && <div className="text-center text-slate-400 py-20 uppercase tracking-widest text-sm">System Idle.</div>}
+        {ideas.length === 0 && <div className="col-span-full text-center text-slate-400 py-20 uppercase tracking-widest text-sm">System Idle.</div>}
       </div>
 
       {/* Advanced Rating Modal */}
