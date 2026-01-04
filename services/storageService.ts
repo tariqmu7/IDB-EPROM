@@ -372,6 +372,11 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export const uploadToDrive = async (file: File): Promise<string> => {
+  // Check file size (5MB limit)
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("File size exceeds 5MB limit. Please upload a smaller file.");
+  }
+
   try {
     const base64 = await fileToBase64(file);
     const content = base64.split(',')[1];
@@ -382,26 +387,40 @@ export const uploadToDrive = async (file: File): Promise<string> => {
       data: content
     };
 
-    // Note: 'no-cors' mode is often required for simple GAS POSTs from browser due to CORS,
-    // but 'no-cors' yields an opaque response (cannot read JSON).
-    // If the script explicitly handles CORS (Option request + headers), 'cors' works.
-    // Assuming standard web app deployment allowing anonymous execution:
+    // Use plain text content type to avoid complex CORS preflight issues on some network configurations
+    // The Google Script must be capable of parsing JSON from post body
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
-      // mode: 'no-cors', // Using no-cors prevents reading the response (URL). 
-      // If the provided script supports CORS, use 'cors'. 
-      // We will try 'cors' first assuming a well-written script.
       headers: {
-        "Content-Type": "text/plain;charset=utf-8", // text/plain prevents preflight
+        "Content-Type": "text/plain;charset=utf-8", 
       },
       body: JSON.stringify(payload),
     });
 
-    const result = await response.json();
+    if (!response.ok) {
+        throw new Error(`Server returned ${response.status} ${response.statusText}`);
+    }
+
+    const text = await response.text();
+    let result;
+    try {
+        result = JSON.parse(text);
+    } catch (e) {
+        console.error("Invalid JSON response:", text);
+        throw new Error("Invalid response format from server.");
+    }
+
+    if (result.error) {
+        throw new Error(result.error);
+    }
+
+    if (!result.url) {
+        throw new Error("No URL returned from upload script.");
+    }
+
     return result.url;
   } catch (error) {
     console.error("Upload failed", error);
-    // Fallback or re-throw
-    throw new Error("Failed to upload attachment to Drive.");
+    throw error;
   }
 };

@@ -525,15 +525,17 @@ const SharedIdeaPage = () => {
              {idea.attachments && idea.attachments.length > 0 && (
                 <Card className="p-8 border-none shadow-md">
                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">Attachments</h3>
-                   <div className="space-y-3">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {idea.attachments.map((url, i) => (
-                         <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded hover:bg-slate-100 transition-colors group">
-                            <div className="bg-white p-2 rounded border border-slate-200 text-slate-500 group-hover:text-blue-600">
-                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                         <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg hover:border-eprom-blue hover:shadow-md transition-all group">
+                            <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+                               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
                             </div>
-                            <span className="text-sm font-bold text-slate-700 underline decoration-slate-300 underline-offset-4 group-hover:text-blue-700 group-hover:decoration-blue-300">
-                               Document Reference {i + 1}
-                            </span>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-900 truncate group-hover:text-eprom-blue">Attachment {i + 1}</p>
+                                <p className="text-xs text-slate-500">Click to view document</p>
+                            </div>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-300 group-hover:text-eprom-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                          </a>
                       ))}
                    </div>
@@ -812,8 +814,6 @@ const Dashboard = () => {
     </div>
   );
 };
-
-// ... (Rest of App.tsx: CollaborationHub, IdeaFormPage, AdminPanel, LandingPage, SearchPage, AuthPage, ProtectedRoute, App component)
 
 const CollaborationHub = () => {
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
@@ -1172,15 +1172,18 @@ const IdeaFormPage = () => {
 
     const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if(e.target.files?.[0]) {
+            const file = e.target.files[0];
             setIsUploading(true);
             try {
-                const url = await db.uploadToDrive(e.target.files[0]);
+                const url = await db.uploadToDrive(file);
                 setAttachments(prev => [...prev, url]);
                 alert("File uploaded to Drive successfully!");
-            } catch (err) {
-                alert("Failed to upload file to Google Drive. Ensure the script is deployed correctly.");
+            } catch (err: any) {
+                console.error(err);
+                alert(`Upload failed: ${err.message || "Unknown error"}. Check console for details.`);
             } finally {
                 setIsUploading(false);
+                e.target.value = ''; // Reset input to allow re-uploading same file if needed
             }
         }
     }
@@ -1417,73 +1420,198 @@ const AdminPanel = () => {
             </div>
             {activeTab === 'users' && (
                 <Card className="overflow-hidden border-none shadow-lg">
-                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div><span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span><button onClick={() => handleDeleteUser(u.id)} className="ml-2 text-red-400 hover:text-red-600"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></div></td></tr>))}</tbody></table></div>
+                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><span className="text-xs font-bold text-green-600 uppercase">Active</span></div></td></tr>))}</tbody></table></div>
                 </Card>
             )}
+
             {activeTab === 'forms' && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-1 space-y-4"><h3 className="text-lg font-bold text-slate-900 mb-4 uppercase tracking-wide">Active Protocols</h3>{templates.map(t => (<Card key={t.id} className={`p-5 border-l-4 transition-all hover:shadow-lg cursor-pointer ${editingTemplateId === t.id ? 'border-l-blue-500 bg-blue-50' : 'border-l-slate-900 bg-white'}`}><div className="flex justify-between items-start"><div onClick={() => handleEditTemplate(t)} className="flex-1"><div className="font-bold text-slate-900 text-sm">{t.name}</div><div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{t.fields.length} Data Points</div><div className="text-[10px] text-slate-900 mt-2 font-bold uppercase">{t.ratingConfig ? `${t.ratingConfig.length} Evaluators` : 'Default KPIs'}</div></div><div className="flex flex-col gap-1"><button className="text-blue-600 hover:text-blue-800 transition-colors text-xs uppercase font-bold" onClick={() => handleEditTemplate(t)}>Edit</button><button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button></div></div></Card>))}</div>
-                    <Card className="lg:col-span-2 p-8 border-none shadow-lg"><div className="flex justify-between items-center mb-8"><h3 className="text-lg font-bold text-slate-900 uppercase tracking-wide flex items-center"><span className={`w-2 h-2 rounded-full mr-3 ${editingTemplateId ? 'bg-blue-500' : 'bg-slate-900'}`}></span>{editingTemplateId ? 'Modify Existing Protocol' : 'New Protocol Configuration'}</h3>{editingTemplateId && (<button onClick={handleCancelEdit} className="text-xs text-slate-500 hover:text-slate-900 uppercase font-bold">Cancel Edit</button>)}</div><div className="mb-8 grid grid-cols-2 gap-6"><Input label="Protocol Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" /><Input label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Short operational summary..." /></div><div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8"><h4 className="text-xs font-bold text-slate-900 mb-6 uppercase tracking-widest border-b border-slate-200 pb-2">01 // Data Structure</h4><div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end"><Input label="Field Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} placeholder="Label" /><div className="mb-5"><label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Data Type</label><select value={editingField.type || ''} onChange={e => setEditingField({...editingField, type: e.target.value as any})} className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 appearance-none input-base"><option value="">Select Type</option><option value="text">Short Text</option><option value="textarea">Long Text</option><option value="number">Numeric</option><option value="select">Selector</option><option value="checkbox">Boolean</option><option value="date">Date</option></select></div>{editingField.type === 'select' && (<Input label="Options (CSV)" value={editingField.options as any || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} placeholder="A, B, C" />)}<div className="mb-5 flex items-center h-10 bg-white px-3 rounded border border-slate-300"><input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-3 text-slate-900 bg-slate-100 border-slate-300 rounded" /><span className="text-xs text-slate-500 uppercase font-bold">Required</span></div></div><Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>{newFields.length > 0 && (<div className="mt-6 space-y-2">{newFields.map((f, idx) => (<div key={idx} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm"><span><span className="font-bold text-slate-900 uppercase">{f.label}</span> <span className="text-slate-500 ml-2">[{f.type}]</span></span><span className="text-[10px] text-slate-400 uppercase font-bold">{f.required ? 'REQ' : 'OPT'}</span></div>))}</div>)}</div><div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8"><div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-2"><h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">02 // Evaluation Metrics</h4><div className={`text-xs font-bold uppercase tracking-wide ${totalWeight === 100 ? 'text-emerald-600' : 'text-red-500'}`}>Total Weight: {totalWeight}%</div></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end mb-6"><Input label="Metric Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} placeholder="e.g. ROI" /><Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} placeholder="Context" /><Input label="Weight (%)" type="number" value={newKPI.weight || ''} onChange={e => setNewKPI({...newKPI, weight: Number(e.target.value)})} placeholder="20" /><Button onClick={addKPI} className="mb-5 bg-white hover:bg-slate-100 border-slate-300 text-slate-600">Add Metric</Button></div><div className="space-y-2">{currentKPIs.map(kpi => (<div key={kpi.id} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm"><div className="flex-1"><span className="font-bold text-slate-800 mr-3 uppercase">{kpi.name}</span><span className="text-slate-500">{kpi.description}</span></div><div className="flex items-center gap-4"><Badge color="blue">{kpi.weight}%</Badge><button onClick={() => removeKPI(kpi.id)} className="text-red-500 hover:text-red-700 transition-colors uppercase font-bold text-[10px]">Remove</button></div></div>))}</div><div className="mt-6 text-right"><button onClick={resetKPIs} className="text-[10px] text-slate-900 hover:text-slate-600 uppercase font-bold tracking-wider">Reset Defaults</button></div></div><div className="flex justify-end pt-6 border-t border-slate-200"><Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>{editingTemplateId ? 'Update Protocol' : 'Deploy Protocol'}</Button></div></Card>
+                     <div className="lg:col-span-1 space-y-6">
+                         <Card className="p-6">
+                            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-4">Template Manager</h3>
+                            <div className="space-y-3">
+                                {templates.map(t => (
+                                    <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded hover:border-slate-300">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-800">{t.name}</div>
+                                            <div className="text-[10px] text-slate-500">{t.fields.length} fields • {t.ratingConfig?.length || 0} KPIs</div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                           <button onClick={() => handleEditTemplate(t)} className="text-blue-600 text-xs font-bold uppercase">Edit</button>
+                                           <button onClick={() => deleteTemplate(t.id)} className="text-red-600 text-xs font-bold uppercase">Del</button>
+                                        </div>
+                                    </div>
+                                ))}
+                                <Button onClick={() => { setEditingTemplateId(null); setNewTemplateName(''); setNewTemplateDesc(''); setNewFields([]); setCurrentKPIs(DEFAULT_KPIS); }} className="w-full mt-4 text-xs">New Template</Button>
+                            </div>
+                         </Card>
+                     </div>
+
+                     <div className="lg:col-span-2 space-y-8">
+                         <Card className="p-8">
+                            <div className="flex justify-between items-start mb-6">
+                                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest">{editingTemplateId ? 'Edit Protocol Template' : 'Create Protocol Template'}</h3>
+                                {editingTemplateId && <Button variant="ghost" onClick={handleCancelEdit} className="text-xs text-red-500">Cancel Edit</Button>}
+                            </div>
+                            
+                            <div className="space-y-4 mb-8">
+                                <Input label="Template Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" />
+                                <Textarea label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Purpose of this form..." />
+                            </div>
+
+                            <div className="mb-8 border-t border-slate-100 pt-6">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Form Fields Schema</h4>
+                                <div className="space-y-3 mb-4">
+                                    {newFields.map((f, i) => (
+                                        <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded">
+                                            <span className="text-[10px] font-mono text-slate-400 bg-white border border-slate-200 px-1 rounded">{f.type}</span>
+                                            <span className="text-sm font-bold text-slate-700 flex-1">{f.label}</span>
+                                            {f.required && <span className="text-[10px] text-red-500 font-bold uppercase">Req</span>}
+                                            <button onClick={() => setNewFields(newFields.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500">×</button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded border border-slate-200">
+                                    <div className="col-span-4"><Input label="Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} className="mb-0" /></div>
+                                    <div className="col-span-3"><Select label="Type" options={['text', 'textarea', 'number', 'select', 'checkbox', 'date']} value={editingField.type || ''} onChange={e => setEditingField({...editingField, type: e.target.value as any})} className="mb-0" /></div>
+                                    <div className="col-span-2 flex items-center h-[42px]"><label className="flex items-center"><input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-2"/> <span className="text-xs font-bold uppercase text-slate-500">Req</span></label></div>
+                                    <div className="col-span-3"><Button onClick={addFieldToTemplate} className="w-full text-xs">Add Field</Button></div>
+                                    {editingField.type === 'select' && (
+                                        <div className="col-span-12 mt-3">
+                                            <Input label="Options (comma separated)" value={(editingField.options as any) || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} className="mb-0" />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="mb-8 border-t border-slate-100 pt-6">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Evaluation KPIs</h4>
+                                <div className="space-y-3 mb-4">
+                                    {currentKPIs.map((k) => (
+                                        <div key={k.id} className="flex justify-between items-center p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-900">
+                                            <div>
+                                                <div className="text-xs font-bold">{k.name} <span className="opacity-50">({k.weight}%)</span></div>
+                                                <div className="text-[10px] opacity-75">{k.description}</div>
+                                            </div>
+                                            <button onClick={() => removeKPI(k.id)} className="text-indigo-400 hover:text-indigo-700">×</button>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center text-xs font-bold text-slate-500 pt-2">
+                                        <span>Total Weight: {totalWeight}%</span>
+                                        {totalWeight !== 100 && <span className="text-red-500">Warning: Should equal 100%</span>}
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded border border-slate-200">
+                                     <div className="col-span-4"><Input label="KPI Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} className="mb-0" /></div>
+                                     <div className="col-span-2"><Input label="Weight %" type="number" value={newKPI.weight || ''} onChange={e => setNewKPI({...newKPI, weight: Number(e.target.value)})} className="mb-0" /></div>
+                                     <div className="col-span-4"><Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} className="mb-0" /></div>
+                                     <div className="col-span-2"><Button onClick={addKPI} className="w-full text-xs">Add</Button></div>
+                                </div>
+                                <div className="mt-2 text-right">
+                                    <button onClick={resetKPIs} className="text-[10px] font-bold uppercase text-slate-400 hover:text-slate-600 underline">Reset to Default KPIs</button>
+                                </div>
+                            </div>
+
+                            <Button onClick={saveTemplate} className="w-full py-4 text-sm tracking-widest">Save Protocol Template</Button>
+                         </Card>
+                     </div>
                 </div>
             )}
+
             {activeTab === 'settings' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8"><Card className="p-8 border-none shadow-lg"><h3 className="font-bold text-lg mb-6 text-slate-900 uppercase tracking-wide">System Definitions</h3><div className="mb-8 p-6 bg-slate-50 rounded border border-slate-200"><label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Brand Identity (Logo)</label><div className="flex items-center gap-4">{settings.logoUrl && (<div className="w-16 h-16 bg-white border border-slate-200 rounded flex items-center justify-center p-2"><img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" /></div>)}<input type="file" onChange={handleLogoUpload} accept="image/*" className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-bold file:uppercase file:bg-slate-900 file:text-white hover:file:bg-slate-800 transition-colors"/></div></div><div className="mb-8"><label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Operational Categories</label><div className="flex gap-3 mb-4"><Input placeholder="New Category" value={newCat} onChange={e => setNewCat(e.target.value)} className="mb-0 flex-1" /><Button onClick={handleAddCategory} className="whitespace-nowrap px-6">Add</Button></div><div className="flex flex-wrap gap-2">{settings.categories.map(c => <Badge key={c} color="gray">{c}</Badge>)}</div></div><div className="pt-6 border-t border-slate-200"><label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Organization Units</label><div className="flex gap-3 mb-4"><Input placeholder="New Department" value={newDept} onChange={e => setNewDept(e.target.value)} className="mb-0 flex-1" /><Button onClick={handleAddDept} className="whitespace-nowrap px-6">Add</Button></div><div className="flex flex-wrap gap-2">{settings.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}</div></div></Card></div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <Card className="p-8">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-6">Departments</h3>
+                        <div className="flex flex-wrap gap-2 mb-6">
+                            {settings.departments.map(d => (
+                                <span key={d} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{d}</span>
+                            ))}
+                        </div>
+                        <div className="flex gap-2">
+                            <Input value={newDept} onChange={e => setNewDept(e.target.value)} placeholder="New Department" className="flex-1 mb-0" />
+                            <Button onClick={handleAddDept}>Add</Button>
+                        </div>
+                    </Card>
+
+                    <Card className="p-8">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-6">Categories</h3>
+                        <div className="flex flex-wrap gap-2 mb-6">
+                            {settings.categories.map(c => (
+                                <span key={c} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{c}</span>
+                            ))}
+                        </div>
+                        <div className="flex gap-2">
+                            <Input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="New Category" className="flex-1 mb-0" />
+                            <Button onClick={handleAddCategory}>Add</Button>
+                        </div>
+                    </Card>
+
+                    <Card className="p-8 md:col-span-2">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-6">Branding</h3>
+                        <div className="flex items-center gap-6">
+                            {settings.logoUrl ? <img src={settings.logoUrl} className="h-16 w-auto" alt="Logo" /> : <div className="h-16 w-16 bg-slate-200 rounded flex items-center justify-center text-slate-400 font-bold">LOGO</div>}
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Upload Company Logo</label>
+                                <input type="file" accept="image/*" onChange={handleLogoUpload} className="text-sm text-slate-500" />
+                            </div>
+                        </div>
+                    </Card>
+                </div>
             )}
         </div>
     );
 };
 
-const ProtectedRoute = ({ children, roles, excludedRoles }: { children: React.ReactElement, roles?: UserRole[], excludedRoles?: UserRole[] }) => {
+// --- Main App Component ---
+
+const ProtectedRoute = ({ children, roles = [] }: { children: React.ReactNode, roles?: UserRole[] }) => {
   const { user } = useAppContext();
-  if (!user) return <Navigate to="/auth" />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" />;
-  if (excludedRoles && excludedRoles.includes(user.role)) return <Navigate to="/admin" />;
-  return children;
+  const location = useLocation();
+
+  if (!user) {
+    return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  if (roles.length > 0 && !roles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 const App = () => {
   return (
     <HashRouter>
       <AppProvider>
-        <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-eprom-bg selection:bg-slate-900 selection:text-white">
-          <Navbar />
-          <div className="flex-grow">
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/auth" element={<AuthPage />} />
-              <Route path="/view/:id" element={<SharedIdeaPage />} />
-              <Route path="/search" element={<SearchPage />} />
-              
-              <Route path="/dashboard" element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/collaboration" element={
-                  <ProtectedRoute excludedRoles={[UserRole.ADMIN]}>
-                      <CollaborationHub />
-                  </ProtectedRoute>
-              } />
-              
-              <Route path="/submit" element={
-                <ProtectedRoute roles={[UserRole.EMPLOYEE]}>
-                  <IdeaFormPage />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="/admin" element={
-                <ProtectedRoute roles={[UserRole.ADMIN]}>
-                  <AdminPanel />
-                </ProtectedRoute>
-              } />
-            </Routes>
-          </div>
-          <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-10 text-center text-xs uppercase tracking-widest">
-            <p className="mb-2">&copy; {new Date().getFullYear()} EPROM Systems</p>
-            <p className="text-[10px]">Confidential & Proprietary</p>
-          </footer>
-        </div>
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/view/:id" element={<SharedIdeaPage />} />
+          
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/submit" element={
+            <ProtectedRoute roles={[UserRole.EMPLOYEE]}>
+              <IdeaFormPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/collaboration" element={
+            <ProtectedRoute>
+              <CollaborationHub />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <ProtectedRoute roles={[UserRole.ADMIN]}>
+              <AdminPanel />
+            </ProtectedRoute>
+          } />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
       </AppProvider>
     </HashRouter>
   );
