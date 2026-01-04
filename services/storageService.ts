@@ -215,15 +215,31 @@ export const uploadImageToFirebase = async (file: File): Promise<string> => {
         throw new Error('Only image files are allowed for this field.');
     }
     
-    // Create a unique path: images/{timestamp}_{filename}
-    const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
-    
-    // Upload
-    const snapshot = await uploadBytes(storageRef, file);
-    
-    // Get URL
-    const url = await getDownloadURL(snapshot.ref);
-    return url;
+    try {
+      // Create a unique path: images/{timestamp}_{filename}
+      const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
+      
+      // Upload
+      const snapshot = await uploadBytes(storageRef, file);
+      
+      // Get URL
+      const url = await getDownloadURL(snapshot.ref);
+      return url;
+    } catch (error: any) {
+      console.warn("Firebase Storage Upload failed. Checking for CORS/Network issue. Attempting fallback to Drive.", error);
+      // Fallback: If Firebase Storage fails (often due to unconfigured CORS on the bucket), 
+      // we use the Google Script (Drive) method which handles CORS via text/plain proxy.
+      try {
+        const driveUrl = await uploadToDrive(file);
+        // Drive URLs often need export=view for image tags, uploadToDrive might return download link
+        if (driveUrl.includes('export=download')) {
+            return driveUrl.replace('export=download', 'export=view');
+        }
+        return driveUrl;
+      } catch (driveError: any) {
+         throw new Error(`Upload failed: ${error.message || "Firebase Error"} | Fallback failed: ${driveError.message}`);
+      }
+    }
 };
 
 // 2. Google Drive for Attachments (PDFs, Docs) via App Script

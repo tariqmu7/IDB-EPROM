@@ -959,7 +959,17 @@ const AuthPage = () => {
         setIsLogin(true);
       }
     } catch (err: any) {
-      setError(err.message);
+      // Improved error handling
+      let msg = err.message;
+      // Common Firebase error codes
+      if (msg.includes('auth/invalid-credential') || msg.includes('auth/user-not-found') || msg.includes('INVALID_LOGIN_CREDENTIALS')) {
+        msg = "Invalid credentials. If you haven't registered yet, please switch to the 'Register' tab to create your account.";
+      } else if (msg.includes('auth/email-already-in-use')) {
+        msg = "Email already in use. Please login.";
+      } else if (msg.includes('auth/weak-password')) {
+        msg = "Password should be at least 6 characters.";
+      }
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -969,7 +979,7 @@ const AuthPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-md p-8">
         <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? 'Login' : 'Register'}</h2>
-        {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
+        {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm font-medium">{error}</div>}
         <form onSubmit={handleSubmit}>
           {!isLogin && <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />}
           <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
@@ -979,7 +989,7 @@ const AuthPage = () => {
           )}
           <Button type="submit" disabled={isLoading} className="w-full mt-4">{isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}</Button>
         </form>
-        <p className="mt-4 text-center text-sm text-slate-500 cursor-pointer hover:text-eprom-blue" onClick={() => setIsLogin(!isLogin)}>
+        <p className="mt-4 text-center text-sm text-slate-500 cursor-pointer hover:text-eprom-blue" onClick={() => { setIsLogin(!isLogin); setError(''); }}>
           {isLogin ? "Need an account? Register" : "Already have an account? Login"}
         </p>
       </Card>
@@ -1275,7 +1285,7 @@ const AdminPanel = () => {
                 const url = await db.uploadImageToFirebase(file);
                 await db.updateSettings({ ...settings, logoUrl: url }); 
                 refreshSettings(); 
-                alert("Logo updated successfully via Firebase!");
+                alert("Logo updated successfully!");
             } catch (err: any) { 
                 alert("Logo upload failed: " + err.message); 
             } finally {
