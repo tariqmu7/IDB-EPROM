@@ -762,7 +762,7 @@ const SharedIdeaPage = () => {
   );
 };
 
-// 4. Submission / Edit Form
+// 4. Submission / Edit Form (Dynamic)
 const IdeaFormPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -773,20 +773,36 @@ const IdeaFormPage = () => {
     const existingIdea = location.state?.idea as Idea | undefined;
     const parentIdea = location.state?.parentIdea as Idea | undefined;
     
-    // Default Template (ID: default-1)
+    const [templates, setTemplates] = useState<FormTemplate[]>([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+
+    // Core Data
     const [title, setTitle] = useState(existingIdea?.title || '');
     const [category, setCategory] = useState(existingIdea?.category || 'Innovation');
     const [description, setDescription] = useState(existingIdea?.description || '');
     const [coverImage, setCoverImage] = useState<string | undefined>(existingIdea?.coverImage);
     
-    // Dynamic Fields (Hardcoded for "Standard Operational Improvement" template for simplicity)
-    const [benefits, setBenefits] = useState(existingIdea?.dynamicData?.benefits || '');
-    const [cost, setCost] = useState(existingIdea?.dynamicData?.cost || '');
-    const [feasibility, setFeasibility] = useState(existingIdea?.dynamicData?.feasibility || 'Moderate');
-    const [timeline, setTimeline] = useState(existingIdea?.dynamicData?.timeline || 'Short-term');
-    const [collab, setCollab] = useState(existingIdea?.dynamicData?.collab || false);
-
+    // Dynamic Data
+    const [dynamicData, setDynamicData] = useState<Record<string, any>>({});
     const [isEnhancing, setIsEnhancing] = useState(false);
+
+    useEffect(() => {
+        const t = db.getTemplates();
+        setTemplates(t);
+        
+        if (existingIdea) {
+            setSelectedTemplateId(existingIdea.templateId);
+            setDynamicData(existingIdea.dynamicData || {});
+        } else {
+             // Default to the first template available if new
+            if (t.length > 0) {
+                setSelectedTemplateId(t[0].id);
+            }
+        }
+    }, [existingIdea]);
+
+    // Find the active template object
+    const currentTemplate = templates.find(t => t.id === selectedTemplateId);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -821,9 +837,13 @@ const IdeaFormPage = () => {
         setIsEnhancing(false);
     };
 
+    const handleDynamicChange = (fieldId: string, value: any) => {
+        setDynamicData(prev => ({ ...prev, [fieldId]: value }));
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return;
+        if (!user || !currentTemplate) return;
 
         const newIdea: Idea = {
             id: existingIdea?.id || Date.now().toString(),
@@ -837,17 +857,11 @@ const IdeaFormPage = () => {
             category,
             coverImage,
             status: existingIdea?.status || IdeaStatus.SUBMITTED,
-            templateId: 'default-1',
-            templateName: 'Standard Operational Improvement',
+            templateId: currentTemplate.id,
+            templateName: currentTemplate.name,
             parentIdeaId: parentIdea?.id,
-            dynamicData: {
-                benefits,
-                cost,
-                feasibility,
-                timeline,
-                collab
-            },
-            tags: [], // Could add tag input
+            dynamicData: dynamicData,
+            tags: [], 
             ratings: existingIdea?.ratings || [],
             comments: existingIdea?.comments || []
         };
@@ -867,6 +881,25 @@ const IdeaFormPage = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Protocol Type Selector */}
+                {!existingIdea && templates.length > 1 && (
+                     <div className="mb-6">
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Protocol Type</label>
+                        <select 
+                            value={selectedTemplateId} 
+                            onChange={(e) => {
+                                setSelectedTemplateId(e.target.value);
+                                setDynamicData({}); // Clear data on template switch
+                            }}
+                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all appearance-none input-base"
+                        >
+                            {templates.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 {/* Core Info */}
                 <Card className="p-8 border-none shadow-lg">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Core Data</h3>
@@ -913,26 +946,52 @@ const IdeaFormPage = () => {
                     </div>
                 </Card>
 
-                {/* Template Fields */}
-                <Card className="p-8 border-none shadow-lg">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Operational Impact</h3>
-                    <Textarea label="Expected Benefits" value={benefits} onChange={e => setBenefits(e.target.value)} required placeholder="Quantify if possible..." />
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Input label="Estimated Cost" value={cost} onChange={e => setCost(e.target.value)} placeholder="Approx. USD" />
-                        <Select label="Feasibility" options={['Easy', 'Moderate', 'Complex']} value={feasibility} onChange={e => setFeasibility(e.target.value)} required />
-                    </div>
+                {/* Template Fields (Dynamic) */}
+                {currentTemplate && (
+                    <Card className="p-8 border-none shadow-lg">
+                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Specific Data Points</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {currentTemplate.fields.map((field) => {
+                                const commonProps = {
+                                    key: field.id,
+                                    label: field.label,
+                                    required: field.required,
+                                    value: dynamicData[field.id] || '',
+                                    onChange: (e: any) => handleDynamicChange(field.id, field.type === 'checkbox' ? e.target.checked : e.target.value)
+                                };
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                         <Select label="Implementation Timeline" options={['Short-term', 'Long-term']} value={timeline} onChange={e => setTimeline(e.target.value)} required />
-                         <div className="flex items-center h-full pt-6">
-                             <label className="flex items-center cursor-pointer">
-                                 <input type="checkbox" checked={collab} onChange={e => setCollab(e.target.checked)} className="form-checkbox h-5 w-5 text-eprom-blue rounded border-slate-300 focus:ring-eprom-blue" />
-                                 <span className="ml-2 text-sm text-slate-700 font-medium">Open for Collaboration / Help Needed</span>
-                             </label>
-                         </div>
-                    </div>
-                </Card>
+                                // Render different inputs based on field type
+                                if (field.type === 'textarea') {
+                                    return (
+                                        <div key={field.id} className="col-span-1 md:col-span-2">
+                                            <Textarea {...commonProps} />
+                                        </div>
+                                    );
+                                } else if (field.type === 'select' && field.options) {
+                                    return <Select {...commonProps} options={field.options} />;
+                                } else if (field.type === 'checkbox') {
+                                    return (
+                                        <div key={field.id} className="flex items-center h-full pt-6">
+                                            <label className="flex items-center cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={!!dynamicData[field.id]} 
+                                                    onChange={(e) => handleDynamicChange(field.id, e.target.checked)} 
+                                                    className="form-checkbox h-5 w-5 text-eprom-blue rounded border-slate-300 focus:ring-eprom-blue" 
+                                                />
+                                                <span className="ml-2 text-sm text-slate-700 font-medium">{field.label}</span>
+                                            </label>
+                                        </div>
+                                    );
+                                } else {
+                                    // Default Text, Number, Date
+                                    return <Input {...commonProps} type={field.type} />;
+                                }
+                            })}
+                        </div>
+                    </Card>
+                )}
 
                 <div className="flex justify-end pt-4">
                     <Button type="submit" className="px-10 py-3 text-sm shadow-xl bg-slate-900 hover:bg-slate-800">Submit Protocol</Button>
@@ -954,6 +1013,7 @@ const AdminPanel = () => {
   const [newDept, setNewDept] = useState('');
 
   // Form Builder State
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateDesc, setNewTemplateDesc] = useState('');
   const [newFields, setNewFields] = useState<FormField[]>([]);
@@ -1059,28 +1119,47 @@ const AdminPanel = () => {
   const resetKPIs = () => setCurrentKPIs(DEFAULT_KPIS);
   const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
 
+  const handleEditTemplate = (t: FormTemplate) => {
+      setEditingTemplateId(t.id);
+      setNewTemplateName(t.name);
+      setNewTemplateDesc(t.description);
+      setNewFields(t.fields);
+      setCurrentKPIs(t.ratingConfig || []);
+      // Scroll to builder
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+      setEditingTemplateId(null);
+      setNewTemplateName('');
+      setNewTemplateDesc('');
+      setNewFields([]);
+      setCurrentKPIs(DEFAULT_KPIS);
+  };
+
   const saveTemplate = () => {
       if(!newTemplateName || newFields.length === 0) return;
       
       const t: FormTemplate = {
-          id: Date.now().toString(),
+          id: editingTemplateId || Date.now().toString(),
           name: newTemplateName,
           description: newTemplateDesc,
           fields: newFields,
-          ratingConfig: currentKPIs, // Use the custom KPIs
+          ratingConfig: currentKPIs,
           isActive: true
       };
       db.saveTemplate(t);
-      setNewTemplateName('');
-      setNewTemplateDesc('');
-      setNewFields([]);
-      setCurrentKPIs(DEFAULT_KPIS); // Reset to defaults for next
+      
+      // Reset
+      handleCancelEdit();
       refreshData();
   };
   
   const deleteTemplate = (id: string) => {
-      db.deleteTemplate(id);
-      refreshData();
+      if (confirm("Are you sure you want to delete this protocol? Existing ideas may lose structural references.")) {
+        db.deleteTemplate(id);
+        refreshData();
+      }
   }
 
   // Helper for pending user row
@@ -1191,16 +1270,19 @@ const AdminPanel = () => {
               <div className="lg:col-span-1 space-y-4">
                   <h3 className="text-lg font-bold text-slate-900 mb-4 uppercase tracking-wide">Active Protocols</h3>
                   {templates.map(t => (
-                      <Card key={t.id} className="p-5 border-l-4 border-l-slate-900 transition-all bg-white hover:shadow-lg cursor-pointer">
+                      <Card key={t.id} className={`p-5 border-l-4 transition-all hover:shadow-lg cursor-pointer ${editingTemplateId === t.id ? 'border-l-blue-500 bg-blue-50' : 'border-l-slate-900 bg-white'}`}>
                           <div className="flex justify-between items-start">
-                              <div>
+                              <div onClick={() => handleEditTemplate(t)} className="flex-1">
                                   <div className="font-bold text-slate-900 text-sm">{t.name}</div>
                                   <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{t.fields.length} Data Points</div>
                                   <div className="text-[10px] text-slate-900 mt-2 font-bold uppercase">
                                       {t.ratingConfig ? `${t.ratingConfig.length} Evaluators` : 'Default KPIs'}
                                   </div>
                               </div>
-                              <button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button>
+                              <div className="flex flex-col gap-1">
+                                <button className="text-blue-600 hover:text-blue-800 transition-colors text-xs uppercase font-bold" onClick={() => handleEditTemplate(t)}>Edit</button>
+                                <button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button>
+                              </div>
                           </div>
                       </Card>
                   ))}
@@ -1208,11 +1290,16 @@ const AdminPanel = () => {
 
               {/* Builder */}
               <Card className="lg:col-span-2 p-8 border-none shadow-lg">
-                  <h3 className="text-lg font-bold text-slate-900 mb-8 uppercase tracking-wide flex items-center">
-                      <span className="w-2 h-2 bg-slate-900 rounded-full mr-3"></span>
-                      New Protocol Configuration
-                  </h3>
-                  {/* ... (Builder Fields code remains similar but refined) ... */}
+                  <div className="flex justify-between items-center mb-8">
+                      <h3 className="text-lg font-bold text-slate-900 uppercase tracking-wide flex items-center">
+                          <span className={`w-2 h-2 rounded-full mr-3 ${editingTemplateId ? 'bg-blue-500' : 'bg-slate-900'}`}></span>
+                          {editingTemplateId ? 'Modify Existing Protocol' : 'New Protocol Configuration'}
+                      </h3>
+                      {editingTemplateId && (
+                          <button onClick={handleCancelEdit} className="text-xs text-slate-500 hover:text-slate-900 uppercase font-bold">Cancel Edit</button>
+                      )}
+                  </div>
+                  
                   <div className="mb-8 grid grid-cols-2 gap-6">
                       <Input label="Protocol Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" />
                       <Input label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Short operational summary..." />
@@ -1255,6 +1342,7 @@ const AdminPanel = () => {
                                 <div key={idx} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
                                     <span><span className="font-bold text-slate-900 uppercase">{f.label}</span> <span className="text-slate-500 ml-2">[{f.type}]</span></span>
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">{f.required ? 'REQ' : 'OPT'}</span>
+                                    {/* Ability to remove field during build? keeping it simple for now */}
                                 </div>
                             ))}
                         </div>
@@ -1296,7 +1384,9 @@ const AdminPanel = () => {
                   </div>
                   
                   <div className="flex justify-end pt-6 border-t border-slate-200">
-                      <Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>Deploy Protocol</Button>
+                      <Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>
+                          {editingTemplateId ? 'Update Protocol' : 'Deploy Protocol'}
+                      </Button>
                   </div>
               </Card>
           </div>
@@ -1570,12 +1660,12 @@ const Dashboard = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-slate-900 mr-3 animate-pulse"></span> 
               Live Intelligence Stream
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
+          <div className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory">
               {published.length === 0 ? (
-                  <div className="w-full p-8 text-slate-400 bg-slate-50 rounded border border-slate-200 text-xs uppercase tracking-wider text-center col-span-full">No active intelligence streams.</div>
+                  <div className="w-full p-8 text-slate-400 bg-slate-50 rounded border border-slate-200 text-xs uppercase tracking-wider text-center flex-shrink-0">No active intelligence streams.</div>
               ) : (
                   published.map(p => (
-                      <div key={p.id} className="w-full bg-slate-900 rounded-lg border border-slate-800 shadow-xl relative overflow-hidden group hover:border-eprom-accent transition-all h-[400px]">
+                      <div key={p.id} className="min-w-[85vw] md:min-w-[450px] flex-shrink-0 snap-center bg-slate-900 rounded-lg border border-slate-800 shadow-xl relative overflow-hidden group hover:border-eprom-accent transition-all h-[400px]">
                           {p.coverImage && (
                               <div className="absolute inset-0 z-0 bg-slate-950">
                                   <img src={p.coverImage} className="w-full h-full object-cover opacity-60 transition-transform duration-700 group-hover:scale-110" />
