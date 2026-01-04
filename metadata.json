@@ -1,0 +1,7 @@
+{
+  "name": "EPROM Innovation Hub",
+  "description": "A comprehensive idea management system for EPROM (Oil & Gas), featuring employee idea submission, manager approval workflows, collaboration tools, and an admin control room.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
