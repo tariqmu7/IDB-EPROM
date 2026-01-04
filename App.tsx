@@ -845,6 +845,14 @@ const IdeaFormPage = () => {
         e.preventDefault();
         if (!user || !currentTemplate) return;
 
+        // Ensure status resets to SUBMITTED if an employee is saving changes to a rejected/revision item
+        let status = existingIdea?.status || IdeaStatus.SUBMITTED;
+        if (user.role === UserRole.EMPLOYEE) {
+            if (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED || status === IdeaStatus.DRAFT) {
+                status = IdeaStatus.SUBMITTED;
+            }
+        }
+
         const newIdea: Idea = {
             id: existingIdea?.id || Date.now().toString(),
             authorId: user.id,
@@ -856,7 +864,7 @@ const IdeaFormPage = () => {
             description,
             category,
             coverImage,
-            status: existingIdea?.status || IdeaStatus.SUBMITTED,
+            status: status,
             templateId: currentTemplate.id,
             templateName: currentTemplate.name,
             parentIdeaId: parentIdea?.id,
@@ -994,7 +1002,9 @@ const IdeaFormPage = () => {
                 )}
 
                 <div className="flex justify-end pt-4">
-                    <Button type="submit" className="px-10 py-3 text-sm shadow-xl bg-slate-900 hover:bg-slate-800">Submit Protocol</Button>
+                    <Button type="submit" className="px-10 py-3 text-sm shadow-xl bg-slate-900 hover:bg-slate-800">
+                        {existingIdea && (existingIdea.status === IdeaStatus.NEEDS_REVISION || existingIdea.status === IdeaStatus.REJECTED) ? 'Resubmit Protocol' : 'Submit Protocol'}
+                    </Button>
                 </div>
             </form>
         </div>
@@ -1003,6 +1013,7 @@ const IdeaFormPage = () => {
 
 // 5. Admin / Control Room (Full Featured)
 const AdminPanel = () => {
+  // ... (No changes needed for Admin Panel in this request) ...
   const { settings, refreshSettings } = useAppContext();
   const [users, setUsers] = useState<User[]>([]);
   const [templates, setTemplates] = useState<FormTemplate[]>([]);
@@ -1439,6 +1450,7 @@ const AdminPanel = () => {
 
 // 6. Collaboration Hub
 const CollaborationHub = () => {
+  // ... (No changes needed for Collaboration Hub) ...
     const { user } = useAppContext();
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
     const navigate = useNavigate();
@@ -1557,6 +1569,13 @@ const Dashboard = () => {
   const handleEdit = (idea: Idea) => {
     navigate('/submit', { state: { idea } });
   };
+  
+  const handleDelete = (id: string) => {
+    if(confirm("Are you sure you want to withdraw this proposal? This action cannot be undone.")) {
+        db.deleteIdea(id);
+        setIdeas(db.getIdeas()); // Refresh
+    }
+  }
 
   const handleStatusChange = (idea: Idea, status: IdeaStatus) => {
     const updated = { ...idea, status };
@@ -1804,7 +1823,7 @@ const Dashboard = () => {
                 {/* External Share Button for Everyone if active */}
                 <Button variant="ghost" className={`w-full text-xs uppercase font-bold border ${idea.coverImage ? 'text-slate-300 border-slate-600 hover:text-white hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:text-slate-900'}`} onClick={() => copyShareLink(idea.id)}>Get Link</Button>
 
-                {(user?.role === UserRole.MANAGER) && (
+                {(user?.role === UserRole.MANAGER || user?.role === UserRole.ADMIN) && (
                    <>
                      {idea.status === IdeaStatus.SUBMITTED && (
                         <div className="flex gap-2">
@@ -1816,17 +1835,16 @@ const Dashboard = () => {
                        <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Request Revision</Button>
                      )}
                      {idea.status === IdeaStatus.APPROVED && (
-                        <Button variant="primary" className="w-full text-xs uppercase bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg" onClick={() => handleStatusChange(idea, IdeaStatus.PUBLISHED)}>Go Live</Button>
+                        <div className="flex gap-2">
+                            <Button variant="primary" className="flex-1 text-xs uppercase bg-emerald-600 hover:bg-emerald-500 border-none shadow-lg" onClick={() => handleStatusChange(idea, IdeaStatus.PUBLISHED)}>Go Live</Button>
+                            <Button variant="secondary" className="flex-1 text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Request Revision</Button>
+                        </div>
                      )}
                      
                      {/* Manager actions for PUBLISHED ideas (Revert/Reject) */}
                      {idea.status === IdeaStatus.PUBLISHED && (
                         <div className="flex flex-col gap-2">
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button variant="secondary" className="w-full text-xs uppercase border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleStatusChange(idea, IdeaStatus.APPROVED)}>Unpublish</Button>
-                                <Button variant="danger" className="w-full text-xs uppercase" onClick={() => handleStatusChange(idea, IdeaStatus.REJECTED)}>Reject</Button>
-                            </div>
-                            <Button variant="ghost" className={`w-full text-xs uppercase ${idea.coverImage ? 'text-slate-300 hover:bg-white/10' : ''}`} onClick={() => handleStatusChange(idea, IdeaStatus.NEEDS_REVISION)}>Send to Revision</Button>
+                            <Button variant="secondary" className="w-full text-xs uppercase border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleStatusChange(idea, IdeaStatus.APPROVED)}>Unpublish (To Approved)</Button>
                         </div>
                      )}
 
@@ -1864,8 +1882,15 @@ const Dashboard = () => {
                 )}
 
                 {/* Employee Actions */}
-                {user?.id === idea.authorId && (idea.status === IdeaStatus.DRAFT || idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.SUBMITTED) && (
-                   <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleEdit(idea)}>Edit Record</Button>
+                {user?.id === idea.authorId && (idea.status === IdeaStatus.DRAFT || idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED || idea.status === IdeaStatus.SUBMITTED) && (
+                   <div className="flex flex-col gap-2">
+                        <Button variant="secondary" className="w-full text-xs uppercase" onClick={() => handleEdit(idea)}>
+                            {idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED ? 'Edit & Resubmit' : 'Edit Record'}
+                        </Button>
+                        {(idea.status === IdeaStatus.DRAFT || idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED) && (
+                             <Button variant="danger" className="w-full text-xs uppercase" onClick={() => handleDelete(idea.id)}>Withdraw / Delete</Button>
+                        )}
+                   </div>
                 )}
               </div>
             </div>
@@ -1933,101 +1958,55 @@ const Dashboard = () => {
            </Card>
         </div>
       )}
-      
-      {/* Global AI Chat Assistant */}
-      {user && <AIChat />}
     </div>
   );
 };
 
-// ... (Main App Logic remains mostly the same, only ensuring wrapper classes match new style) ...
-
-const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+const App = () => {
+  const [user, setUser] = useState<User | null>(db.getCurrentUser());
   const [settings, setSettings] = useState<AppSettings>(db.getSettings());
 
-  useEffect(() => {
-    setUser(db.getCurrentUser());
-  }, []);
-
   const login = async (u: string, p: string) => {
-    // Simulate Async
-    await new Promise(r => setTimeout(r, 500));
-    const loggedUser = db.loginUser(u, p);
-    setUser(loggedUser);
+    // In a real app this would be async
+    const user = db.loginUser(u, p);
+    setUser(user);
+    return Promise.resolve();
   };
 
   const logout = () => {
     db.logoutUser();
     setUser(null);
   };
-
+  
   const refreshSettings = () => {
     setSettings(db.getSettings());
   };
 
   return (
     <AppContext.Provider value={{ user, settings, login, logout, refreshSettings }}>
-      {children}
+        {/* Using HashRouter for GitHub Pages compatibility */}
+        <HashRouter>
+            <div className="min-h-screen bg-eprom-bg font-sans text-slate-900 selection:bg-slate-900 selection:text-white">
+                <Navbar />
+                <Routes>
+                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/auth" element={<AuthPage />} />
+                    <Route path="/view/:id" element={<SharedIdeaPage />} />
+                    
+                    {/* Protected Routes */}
+                    <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/auth" replace />} />
+                    <Route path="/search" element={user ? <SearchPage /> : <Navigate to="/auth" replace />} />
+                    <Route path="/submit" element={user ? <IdeaFormPage /> : <Navigate to="/auth" replace />} />
+                    <Route path="/collaboration" element={user ? <CollaborationHub /> : <Navigate to="/auth" replace />} />
+                    <Route path="/admin" element={user && user.role === UserRole.ADMIN ? <AdminPanel /> : <Navigate to="/dashboard" replace />} />
+                    
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+                {/* Global AI Chat - moved from Dashboard to App so it persists */}
+                {user && <AIChat />}
+            </div>
+        </HashRouter>
     </AppContext.Provider>
-  );
-};
-
-const ProtectedRoute = ({ children, roles, excludedRoles }: { children: React.ReactElement, roles?: UserRole[], excludedRoles?: UserRole[] }) => {
-  const { user } = useAppContext();
-  
-  if (!user) return <Navigate to="/auth" />;
-  if (roles && !roles.includes(user.role)) return <Navigate to="/" />;
-  if (excludedRoles && excludedRoles.includes(user.role)) return <Navigate to="/admin" />; // Admin default redirect
-  
-  return children;
-};
-
-const App = () => {
-  return (
-    <HashRouter>
-      <AppProvider>
-        <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-eprom-bg selection:bg-slate-900 selection:text-white">
-          <Navbar />
-          <div className="flex-grow">
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/auth" element={<AuthPage />} />
-              <Route path="/view/:id" element={<SharedIdeaPage />} />
-              <Route path="/search" element={<SearchPage />} />
-              
-              <Route path="/dashboard" element={
-                <ProtectedRoute excludedRoles={[UserRole.ADMIN]}>
-                  <Dashboard />
-                </ProtectedRoute>
-              } />
-
-              <Route path="/collaboration" element={
-                  <ProtectedRoute excludedRoles={[UserRole.ADMIN]}>
-                      <CollaborationHub />
-                  </ProtectedRoute>
-              } />
-              
-              <Route path="/submit" element={
-                <ProtectedRoute roles={[UserRole.EMPLOYEE]}>
-                  <IdeaFormPage />
-                </ProtectedRoute>
-              } />
-              
-              <Route path="/admin" element={
-                <ProtectedRoute roles={[UserRole.ADMIN]}>
-                  <AdminPanel />
-                </ProtectedRoute>
-              } />
-            </Routes>
-          </div>
-          <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-10 text-center text-xs uppercase tracking-widest">
-            <p className="mb-2">&copy; {new Date().getFullYear()} EPROM Systems</p>
-            <p className="text-[10px]">Confidential & Proprietary</p>
-          </footer>
-        </div>
-      </AppProvider>
-    </HashRouter>
   );
 };
 
