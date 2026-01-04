@@ -1334,7 +1334,7 @@ const AdminPanel = () => {
                               <span className="text-xs text-slate-500 uppercase font-bold">Required</span>
                           </div>
                       </div>
-                      <Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>
+                      <Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-black hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>
                       
                       {newFields.length > 0 && (
                         <div className="mt-6 space-y-2">
