@@ -10,10 +10,11 @@ import { Content } from '@google/genai';
 
 interface AppContextType {
   user: User | null;
-  settings: AppSettings;
+  settings: AppSettings | null;
   login: (u: string, p: string) => Promise<UserRole>;
   logout: () => void;
   refreshSettings: () => void;
+  authLoading: boolean;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -91,14 +92,16 @@ const Navbar = () => {
     }
   };
 
+  const logoUrl = settings?.logoUrl;
+
   return (
     <nav className="fixed top-0 w-full z-50 glass-panel border-b border-white/20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center cursor-pointer group" onClick={() => navigate('/')}>
-            {settings.logoUrl ? (
+            {logoUrl ? (
               <img 
-                src={settings.logoUrl} 
+                src={logoUrl} 
                 alt="EPROM" 
                 className="h-10 w-auto object-contain mr-4 transition-transform duration-300 group-hover:scale-105" 
               />
@@ -106,7 +109,7 @@ const Navbar = () => {
               <div className="h-9 w-9 bg-slate-900 rounded-lg flex items-center justify-center font-bold text-white mr-3 shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform">E</div>
             )}
             <span className="font-bold text-lg tracking-tight text-slate-900 group-hover:text-eprom-accent transition-colors">
-              {!settings.logoUrl && <span>EPROM <span className="text-slate-400 font-light">HUB</span></span>}
+              {!logoUrl && <span>EPROM <span className="text-slate-400 font-light">HUB</span></span>}
             </span>
           </div>
           
@@ -313,27 +316,45 @@ const AIChat = () => {
 // --- AppProvider Implementation ---
 
 const AppProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(db.getCurrentUser());
-  const [settings, setSettings] = useState<AppSettings>(db.getSettings());
+  const [user, setUser] = useState<User | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    // 1. Subscribe to Auth Changes
+    const unsubscribe = db.subscribeToAuth((u) => {
+      setUser(u);
+      setAuthLoading(false);
+    });
+
+    // 2. Initial Settings Fetch
+    refreshSettings();
+
+    return () => unsubscribe();
+  }, []);
 
   const login = async (u: string, p: string): Promise<UserRole> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const loggedUser = db.loginUser(u, p);
+    const loggedUser = await db.loginUser(u, p);
     setUser(loggedUser);
     return loggedUser.role;
   };
 
-  const logout = () => {
-    db.logoutUser();
+  const logout = async () => {
+    await db.logoutUser();
     setUser(null);
   };
 
-  const refreshSettings = () => {
-    setSettings(db.getSettings());
+  const refreshSettings = async () => {
+    const s = await db.getSettings();
+    setSettings(s);
   };
 
+  if (authLoading) {
+     return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 uppercase font-bold text-sm tracking-widest animate-pulse">Initializing System...</div>;
+  }
+
   return (
-    <AppContext.Provider value={{ user, settings, login, logout, refreshSettings }}>
+    <AppContext.Provider value={{ user, settings, login, logout, refreshSettings, authLoading }}>
       {children}
       <AIChat />
     </AppContext.Provider>
@@ -348,6 +369,7 @@ const SharedIdeaPage = () => {
   const navigate = useNavigate();
   const [idea, setIdea] = useState<Idea | null>(null);
   const [template, setTemplate] = useState<FormTemplate | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
   // Manager Evaluation State
   const [evalScores, setEvalScores] = useState<Record<string, number>>({});
@@ -355,25 +377,34 @@ const SharedIdeaPage = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      const found = db.getIdeas().find(i => i.id === id);
-      if (found) {
-        setIdea(found);
-        const t = db.getTemplates().find(tmpl => tmpl.id === found.templateId);
-        setTemplate(t || null);
+    const fetch = async () => {
+        if (!id) return;
+        setIsLoading(true);
+        const allIdeas = await db.getIdeas();
+        const found = allIdeas.find(i => i.id === id);
         
-        // Init scores if manager
-        if (t?.ratingConfig) {
-          const initScores: Record<string, number> = {};
-          t.ratingConfig.forEach(k => initScores[k.id] = 3); // Default middle
-          setEvalScores(initScores);
+        if (found) {
+            setIdea(found);
+            const templates = await db.getTemplates();
+            const t = templates.find(tmpl => tmpl.id === found.templateId);
+            setTemplate(t || null);
+            
+            // Init scores if manager
+            if (t?.ratingConfig) {
+                const initScores: Record<string, number> = {};
+                t.ratingConfig.forEach(k => initScores[k.id] = 3); // Default middle
+                setEvalScores(initScores);
+            }
         }
-      }
+        setIsLoading(false);
     }
+    fetch();
   }, [id]);
 
-  // PUBLIC ACCESS GUARD: If no user, check if public. If not public, redirect.
-  // Note: Guest users (UserRole.GUEST) can view everything, public can only view PUBLISHED.
+  if (isLoading) return <div className="text-center py-20 text-slate-400">Loading Protocol Data...</div>;
+  if (!idea) return <div className="text-center py-20 text-slate-400">Idea not found.</div>;
+
+  // PUBLIC ACCESS GUARD
   const isPublic = idea?.status === IdeaStatus.PUBLISHED;
   if (idea && !user && !isPublic) {
     return <Navigate to="/auth" />;
@@ -406,15 +437,15 @@ const SharedIdeaPage = () => {
     return totalWeight > 0 ? total / totalWeight : 0;
   };
 
-  const updateStatus = (status: IdeaStatus) => {
+  const updateStatus = async (status: IdeaStatus) => {
       if(!idea) return;
       const updatedIdea = { ...idea, status: status };
-      db.saveIdea(updatedIdea);
+      await db.saveIdea(updatedIdea);
       setIdea(updatedIdea);
       alert(`Status updated to: ${status}`);
   }
 
-  const submitEvaluation = (verdict: 'APPROVE' | 'REJECT' | 'REVISE') => {
+  const submitEvaluation = async (verdict: 'APPROVE' | 'REJECT' | 'REVISE') => {
     if (!idea || !user || !template) return;
 
     const weightedScore = calculateTotalScore();
@@ -442,28 +473,22 @@ const SharedIdeaPage = () => {
     if(verdict === 'REVISE') newStatus = IdeaStatus.NEEDS_REVISION;
     if(verdict === 'REJECT') newStatus = IdeaStatus.REJECTED;
 
-    // Always log the rating regardless of the verdict
     const updatedRatings = [...(idea.ratings || []), newRating];
 
     const updatedIdea = { 
         ...idea, 
         status: newStatus,
         ratings: updatedRatings,
-        managerFeedback: evalComment // Preserve quick access to feedback
+        managerFeedback: evalComment 
     };
 
-    db.saveIdea(updatedIdea);
+    await db.saveIdea(updatedIdea);
     setIdea(updatedIdea);
     alert(`Protocol ${verdict}D`);
     navigate('/dashboard');
   };
 
-  if (!idea) return <div className="text-center py-20">Idea not found.</div>;
-
   const isManager = user?.role === UserRole.MANAGER || user?.role === UserRole.ADMIN;
-  
-  // Show Controls Logic
-  // Manager sees controls if Pending (Submitted) OR if they want to manage Published state
   const isEvaluating = idea.status === IdeaStatus.SUBMITTED;
 
   return (
@@ -543,9 +568,9 @@ const SharedIdeaPage = () => {
              )}
           </div>
 
-          {/* Sidebar / Manager Console */}
+          {/* Sidebar */}
           <div className="space-y-6">
-             {/* PHASE 1: EVALUATION (SUBMITTED -> APPROVED/REJECTED/REVISION) */}
+             {/* Same logic for Manager/Viewer as before, just ensuring data is loaded */}
              {isManager && isEvaluating && template?.ratingConfig ? (
                 <Card className="p-6 border-l-4 border-l-indigo-600 shadow-xl bg-white sticky top-24">
                    <div className="flex justify-between items-center mb-6">
@@ -554,7 +579,7 @@ const SharedIdeaPage = () => {
                          {isProcessing ? <span className="animate-spin">⚙️</span> : <span>✨ AI Auto-Grade</span>}
                       </button>
                    </div>
-
+                   {/* ... (Existing Evaluation Controls) ... */}
                    <div className="space-y-5 mb-8">
                       {template.ratingConfig.map(kpi => (
                          <div key={kpi.id}>
@@ -562,28 +587,15 @@ const SharedIdeaPage = () => {
                                <span className="font-bold text-slate-700">{kpi.name}</span>
                                <span className="font-mono text-slate-500">{evalScores[kpi.id] || '-'}/5</span>
                             </div>
-                            <input 
-                               type="range" 
-                               min="1" max="5" 
-                               value={evalScores[kpi.id] || 3}
-                               onChange={(e) => setEvalScores({...evalScores, [kpi.id]: Number(e.target.value)})}
-                               className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                            />
+                            <input type="range" min="1" max="5" value={evalScores[kpi.id] || 3} onChange={(e) => setEvalScores({...evalScores, [kpi.id]: Number(e.target.value)})} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
                             <p className="text-[10px] text-slate-400 mt-1">{kpi.description}</p>
                          </div>
                       ))}
                    </div>
-
                    <div className="mb-6">
                       <label className="block text-xs font-bold text-slate-700 mb-2 uppercase">Verdict / Feedback</label>
-                      <textarea 
-                         value={evalComment}
-                         onChange={(e) => setEvalComment(e.target.value)}
-                         className="w-full p-3 bg-slate-50 border border-slate-200 rounded text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 h-32"
-                         placeholder="Provide constructive feedback..."
-                      />
+                      <textarea value={evalComment} onChange={(e) => setEvalComment(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 h-32" placeholder="Provide constructive feedback..." />
                    </div>
-
                    <div className="grid grid-cols-1 gap-3">
                       <Button onClick={() => submitEvaluation('APPROVE')} className="w-full bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white">Approve (Internal)</Button>
                       <div className="grid grid-cols-2 gap-3">
@@ -593,93 +605,30 @@ const SharedIdeaPage = () => {
                    </div>
                 </Card>
              ) : (
-                /* PHASE 2: PUBLISHING / MANAGEMENT (APPROVED/PUBLISHED) or VIEW ONLY */
                 <Card className="p-6 border-none shadow-md bg-slate-50 sticky top-24">
                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Protocol Status</h3>
                    <div className="mb-6">
-                      <div className={`text-xl font-bold mb-1 ${
-                         idea.status === IdeaStatus.PUBLISHED ? 'text-green-600' : 
-                         idea.status === IdeaStatus.APPROVED ? 'text-blue-600' :
-                         idea.status === IdeaStatus.REJECTED ? 'text-red-600' : 
-                         idea.status === IdeaStatus.NEEDS_REVISION ? 'text-amber-600' : 'text-slate-600'
-                      }`}>
-                         {idea.status.replace('_', ' ')}
-                      </div>
+                      <div className={`text-xl font-bold mb-1 ${idea.status === IdeaStatus.PUBLISHED ? 'text-green-600' : idea.status === IdeaStatus.APPROVED ? 'text-blue-600' : idea.status === IdeaStatus.REJECTED ? 'text-red-600' : idea.status === IdeaStatus.NEEDS_REVISION ? 'text-amber-600' : 'text-slate-600'}`}>{idea.status.replace('_', ' ')}</div>
                       <div className="text-xs text-slate-500">Last updated {new Date(idea.updatedAt).toLocaleDateString()}</div>
                    </div>
-
-                   {/* Publishing Controls for Manager */}
                    {isManager && (idea.status === IdeaStatus.APPROVED || idea.status === IdeaStatus.PUBLISHED) && (
                        <div className="p-4 bg-white border border-slate-200 rounded mb-6">
                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-3">Publishing Controls</h4>
-                           {idea.status === IdeaStatus.APPROVED && (
-                               <div className="space-y-2">
-                                   <p className="text-xs text-slate-500 mb-2">Protocol is approved internally. Publish to make it live for the organization?</p>
-                                   <Button onClick={() => updateStatus(IdeaStatus.PUBLISHED)} className="w-full bg-slate-900 text-white">Publish Live</Button>
-                                   <Button onClick={() => updateStatus(IdeaStatus.NEEDS_REVISION)} variant="secondary" className="w-full text-xs">Return for Revision</Button>
-                               </div>
-                           )}
-                           {idea.status === IdeaStatus.PUBLISHED && (
-                               <div className="space-y-2">
-                                   <p className="text-xs text-slate-500 mb-2">Protocol is live. Unpublish to hide it from the public registry?</p>
-                                   <Button onClick={() => updateStatus(IdeaStatus.APPROVED)} variant="secondary" className="w-full">Unpublish (Make Private)</Button>
-                               </div>
-                           )}
+                           {idea.status === IdeaStatus.APPROVED && (<div className="space-y-2"><p className="text-xs text-slate-500 mb-2">Protocol is approved internally. Publish to make it live?</p><Button onClick={() => updateStatus(IdeaStatus.PUBLISHED)} className="w-full bg-slate-900 text-white">Publish Live</Button><Button onClick={() => updateStatus(IdeaStatus.NEEDS_REVISION)} variant="secondary" className="w-full text-xs">Return for Revision</Button></div>)}
+                           {idea.status === IdeaStatus.PUBLISHED && (<div className="space-y-2"><p className="text-xs text-slate-500 mb-2">Protocol is live. Unpublish?</p><Button onClick={() => updateStatus(IdeaStatus.APPROVED)} variant="secondary" className="w-full">Unpublish</Button></div>)}
                        </div>
                    )}
-
-                   {/* Render All Ratings */}
                    {idea.ratings && idea.ratings.length > 0 && (
                       <div className="space-y-4 mb-6">
                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Evaluation History</h4>
                          {idea.ratings.slice().reverse().map((rating, index) => (
                             <div key={index} className="p-4 bg-white rounded border border-slate-200 shadow-sm">
-                               <div className="flex justify-between items-start mb-3">
-                                  <div>
-                                     <div className="text-xs text-slate-400 font-bold uppercase mb-0.5">{new Date(rating.createdAt).toLocaleDateString()}</div>
-                                     <div className="font-bold text-slate-900 text-sm">{rating.managerName}</div>
-                                  </div>
-                                  <div className="text-right">
-                                     <span className={`text-xl font-black ${rating.grade >= 'D' ? 'text-red-600' : 'text-slate-900'}`}>{rating.grade}</span>
-                                     <span className="block text-[10px] font-bold text-slate-500">{rating.percentage}%</span>
-                                  </div>
-                               </div>
-                               
-                               {/* Scores Breakdown */}
-                               {rating.details && (
-                                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-4 bg-slate-50 p-2 rounded">
-                                       {rating.details.map((det, i) => {
-                                           // Attempt to find friendly name
-                                           const dimName = template?.ratingConfig?.find(c => c.id === det.dimensionId)?.name || det.dimensionId;
-                                           return (
-                                               <div key={i} className="flex justify-between items-center text-[10px]">
-                                                   <span className="text-slate-500 truncate max-w-[100px]" title={dimName}>{dimName}</span>
-                                                   <div className="flex gap-0.5">
-                                                       {[1,2,3,4,5].map(star => (
-                                                           <div key={star} className={`w-1.5 h-1.5 rounded-full ${star <= det.score ? 'bg-indigo-500' : 'bg-slate-200'}`}></div>
-                                                       ))}
-                                                   </div>
-                                               </div>
-                                           );
-                                       })}
-                                   </div>
-                               )}
-
+                               <div className="flex justify-between items-start mb-3"><div><div className="text-xs text-slate-400 font-bold uppercase mb-0.5">{new Date(rating.createdAt).toLocaleDateString()}</div><div className="font-bold text-slate-900 text-sm">{rating.managerName}</div></div><div className="text-right"><span className={`text-xl font-black ${rating.grade >= 'D' ? 'text-red-600' : 'text-slate-900'}`}>{rating.grade}</span><span className="block text-[10px] font-bold text-slate-500">{rating.percentage}%</span></div></div>
                                <p className="text-sm text-slate-600 italic border-l-2 border-indigo-100 pl-3">"{rating.comment}"</p>
                             </div>
                          ))}
                       </div>
                    )}
-
-                   {/* Fallback for old data: just Manager Feedback */}
-                   {idea.managerFeedback && (!idea.ratings || idea.ratings.length === 0) && (
-                      <div className="p-4 bg-amber-50 border border-amber-200 rounded text-amber-900 text-sm mb-4">
-                         <span className="block font-bold mb-1 uppercase text-xs">Manager Feedback:</span>
-                         {idea.managerFeedback}
-                      </div>
-                   )}
-                   
-                   {/* Employee Action: Resubmit */}
                    {(user?.id === idea.authorId) && (idea.status === IdeaStatus.NEEDS_REVISION || idea.status === IdeaStatus.REJECTED) && (
                       <Button onClick={() => navigate('/submit', { state: { idea } })} className="w-full mt-4">Edit & Resubmit</Button>
                    )}
@@ -697,32 +646,31 @@ const Dashboard = () => {
   const [myIdeas, setMyIdeas] = useState<Idea[]>([]);
   const [reviewQueue, setReviewQueue] = useState<Idea[]>([]);
   const [registry, setRegistry] = useState<Idea[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      // Security Check: Admins should not see dashboard, they have Control Room
-      if (user.role === UserRole.ADMIN) {
-        navigate('/admin');
-        return;
-      }
-
-      const allIdeas = db.getIdeas();
-      
-      if (user.role === UserRole.EMPLOYEE) {
-        setMyIdeas(allIdeas.filter(i => i.authorId === user.id));
-      } else {
-        // Manager View
-        setReviewQueue(allIdeas.filter(i => i.status === IdeaStatus.SUBMITTED));
-        setRegistry(allIdeas.filter(i => i.status !== IdeaStatus.SUBMITTED && i.status !== IdeaStatus.DRAFT));
-      }
-    }
+    const fetchData = async () => {
+        if (user) {
+            setIsLoading(true);
+            const allIdeas = await db.getIdeas();
+            
+            if (user.role === UserRole.EMPLOYEE) {
+                setMyIdeas(allIdeas.filter(i => i.authorId === user.id));
+            } else {
+                setReviewQueue(allIdeas.filter(i => i.status === IdeaStatus.SUBMITTED));
+                setRegistry(allIdeas.filter(i => i.status !== IdeaStatus.SUBMITTED && i.status !== IdeaStatus.DRAFT));
+            }
+            setIsLoading(false);
+        }
+    };
+    fetchData();
   }, [user]);
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this protocol?")) {
-      db.deleteIdea(id);
-      // Refresh local state
-      const allIdeas = db.getIdeas();
+      await db.deleteIdea(id);
+      // Refresh
+      const allIdeas = await db.getIdeas();
       if (user?.role === UserRole.EMPLOYEE) {
          setMyIdeas(allIdeas.filter(i => i.authorId === user!.id));
       } else {
@@ -740,12 +688,7 @@ const Dashboard = () => {
           <Card key={idea.id} className="flex flex-col h-full relative group hover:border-blue-400 transition-colors cursor-pointer" onClick={() => navigate(`/view/${idea.id}`)}>
              <div className="p-6 flex-1">
                <div className="flex justify-between items-start mb-4">
-                 <Badge color={
-                   idea.status === IdeaStatus.PUBLISHED ? 'green' : 
-                   idea.status === IdeaStatus.APPROVED ? 'blue' : 
-                   idea.status === IdeaStatus.REJECTED ? 'red' : 
-                   idea.status === IdeaStatus.SUBMITTED ? 'blue' : 'amber'
-                 }>{idea.status}</Badge>
+                 <Badge color={idea.status === IdeaStatus.PUBLISHED ? 'green' : idea.status === IdeaStatus.APPROVED ? 'blue' : idea.status === IdeaStatus.REJECTED ? 'red' : idea.status === IdeaStatus.SUBMITTED ? 'blue' : 'amber'}>{idea.status}</Badge>
                  <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(idea.createdAt).toLocaleDateString()}</span>
                </div>
                <h3 className="font-bold text-lg text-slate-900 mb-2 leading-tight">{idea.title}</h3>
@@ -756,15 +699,10 @@ const Dashboard = () => {
                   <span>{idea.department}</span>
                </div>
              </div>
-             {/* Footer Actions */}
              {(user?.id === idea.authorId || user?.role === UserRole.ADMIN) && (
                 <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center gap-3 rounded-b-lg" onClick={e => e.stopPropagation()}>
-                    <button onClick={() => navigate('/submit', { state: { idea } })} className="text-slate-400 hover:text-blue-600 p-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </button>
-                    <button onClick={() => handleDelete(idea.id)} className="text-slate-400 hover:text-red-600 p-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
+                    <button onClick={() => navigate('/submit', { state: { idea } })} className="text-slate-400 hover:text-blue-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                    <button onClick={() => handleDelete(idea.id)} className="text-slate-400 hover:text-red-600 p-1"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                 </div>
              )}
           </Card>
@@ -772,6 +710,8 @@ const Dashboard = () => {
       </div>
     );
   };
+
+  if (isLoading) return <div className="max-w-7xl mx-auto px-4 py-24 text-center text-slate-400">Syncing with HQ...</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
@@ -804,7 +744,6 @@ const Dashboard = () => {
                 </div>
                 <IdeaGrid ideas={reviewQueue} emptyMsg="Review queue clear. Good job!" />
             </section>
-            
             <section>
                 <h2 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">Innovation Registry</h2>
                 <IdeaGrid ideas={registry} emptyMsg="Registry is empty." />
@@ -818,20 +757,26 @@ const Dashboard = () => {
 const CollaborationHub = () => {
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(true);
     
     useEffect(() => {
-        const all = db.getIdeas();
-        setCollabIdeas(all.filter(i => 
-             (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) && 
-             (i.dynamicData['collab'] === true || (i as any).collaborationNeeded === true)
-        ));
+        const fetch = async () => {
+            const all = await db.getIdeas();
+            setCollabIdeas(all.filter(i => 
+                (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) && 
+                (i.dynamicData['collab'] === true || (i as any).collaborationNeeded === true)
+            ));
+            setIsLoading(false);
+        };
+        fetch();
     }, []);
+
+    if (isLoading) return <div className="text-center py-24 text-slate-400">Loading Collab Opportunities...</div>;
 
     return (
         <div className="max-w-7xl mx-auto px-4 py-24">
             <h1 className="text-3xl font-bold mb-2 text-slate-900 uppercase tracking-tight">Collaboration Hub</h1>
             <p className="text-slate-500 mb-10 font-medium">Join forces on these active initiatives.</p>
-            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {collabIdeas.map(idea => (
                     <Card key={idea.id} className="p-6">
@@ -840,13 +785,7 @@ const CollaborationHub = () => {
                         <p className="text-sm text-slate-500 mb-6 line-clamp-3">{idea.description}</p>
                         <div className="flex justify-between items-center mt-auto pt-4 border-t border-slate-100">
                             <span className="text-xs font-bold text-slate-400">{idea.authorName}</span>
-                            <Button 
-                                variant="secondary" 
-                                className="text-xs py-1.5 px-4 font-bold border-slate-300"
-                                onClick={() => navigate('/submit', { state: { parentIdea: idea } })}
-                            >
-                                Collaborate
-                            </Button>
+                            <Button variant="secondary" className="text-xs py-1.5 px-4 font-bold border-slate-300" onClick={() => navigate('/submit', { state: { parentIdea: idea } })}>Collaborate</Button>
                         </div>
                     </Card>
                 ))}
@@ -862,32 +801,32 @@ const SearchPage = () => {
     const [results, setResults] = useState<Idea[]>([]);
     const { user } = useAppContext();
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        if (!query) {
-            setResults([]);
-            return;
-        }
-        const term = query.toLowerCase();
-        const allIdeas = db.getIdeas();
-        const filtered = allIdeas.filter(idea => {
-            const isMine = user?.id === idea.authorId;
-            const isPublic = idea.status === IdeaStatus.PUBLISHED;
-            const isCollab = idea.status === IdeaStatus.APPROVED && (idea.dynamicData['collab'] || (idea as any).collaborationNeeded);
-            // Allow Guest to see Public
-            const canSee = isMine || isPublic || isCollab || user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER || user?.role === UserRole.GUEST;
-
-            if (!canSee) return false;
-
-            return (
-                idea.title.toLowerCase().includes(term) ||
-                idea.description.toLowerCase().includes(term) ||
-                idea.category.toLowerCase().includes(term) ||
-                idea.authorName.toLowerCase().includes(term) ||
-                idea.tags?.some(t => t.toLowerCase().includes(term))
-            );
-        });
-        setResults(filtered);
+        const fetch = async () => {
+            if (!query) { setResults([]); return; }
+            setIsLoading(true);
+            const term = query.toLowerCase();
+            const allIdeas = await db.getIdeas();
+            const filtered = allIdeas.filter(idea => {
+                const isMine = user?.id === idea.authorId;
+                const isPublic = idea.status === IdeaStatus.PUBLISHED;
+                const isCollab = idea.status === IdeaStatus.APPROVED && (idea.dynamicData['collab'] || (idea as any).collaborationNeeded);
+                const canSee = isMine || isPublic || isCollab || user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER || user?.role === UserRole.GUEST;
+                if (!canSee) return false;
+                return (
+                    idea.title.toLowerCase().includes(term) ||
+                    idea.description.toLowerCase().includes(term) ||
+                    idea.category.toLowerCase().includes(term) ||
+                    idea.authorName.toLowerCase().includes(term) ||
+                    idea.tags?.some(t => t.toLowerCase().includes(term))
+                );
+            });
+            setResults(filtered);
+            setIsLoading(false);
+        };
+        fetch();
     }, [query, user]);
 
     return (
@@ -896,36 +835,19 @@ const SearchPage = () => {
                 <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Search Results</h1>
                 <p className="text-slate-500 text-sm mt-1 font-medium">Found {results.length} records for "{query}"</p>
              </div>
-
-             {results.length === 0 ? (
-                 <div className="text-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
-                     <p className="text-slate-400 uppercase tracking-widest text-sm">No matches found in the registry.</p>
-                 </div>
+             {isLoading ? <div className="text-slate-400">Searching...</div> : results.length === 0 ? (
+                 <div className="text-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm"><p className="text-slate-400 uppercase tracking-widest text-sm">No matches found in the registry.</p></div>
              ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {results.map(idea => (
                          <Card key={idea.id} className={`flex flex-col justify-between hover:border-slate-300 transition-colors cursor-pointer group relative overflow-hidden rounded-xl ${idea.coverImage ? 'bg-slate-900 border-none' : 'p-6'}`} onClick={() => navigate('/dashboard')}>
-                             {idea.coverImage && (
-                                <>
-                                  <div className="absolute inset-0 z-0 bg-slate-950">
-                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50" />
-                                  </div>
-                                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
-                                </>
-                             )}
-                             
+                             {idea.coverImage && (<><div className="absolute inset-0 z-0 bg-slate-950"><img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50" /></div><div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-transparent" /></>)}
                              <div className={`relative z-10 ${idea.coverImage ? 'p-6' : ''}`}>
-                                 <div className="flex items-center gap-3 mb-3">
-                                     <Badge color="blue">{idea.category}</Badge>
-                                     <Badge color="gray">{idea.status}</Badge>
-                                 </div>
+                                 <div className="flex items-center gap-3 mb-3"><Badge color="blue">{idea.category}</Badge><Badge color="gray">{idea.status}</Badge></div>
                                  <h3 className={`text-xl font-bold ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-800'}`}>{idea.title}</h3>
                                  <p className={`text-sm line-clamp-2 mt-2 font-medium ${idea.coverImage ? 'text-slate-300 drop-shadow-md' : 'text-slate-500'}`}>{idea.description}</p>
                              </div>
-                             <div className={`mt-4 relative z-10 flex justify-between items-end ${idea.coverImage ? 'px-6 pb-6' : ''}`}>
-                                 <div className={`text-xs uppercase font-bold tracking-wide ${idea.coverImage ? 'text-slate-400' : 'text-slate-400'}`}>{idea.authorName}</div>
-                                 <div className={`text-[10px] font-bold ${idea.coverImage ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(idea.createdAt).toLocaleDateString()}</div>
-                             </div>
+                             <div className={`mt-4 relative z-10 flex justify-between items-end ${idea.coverImage ? 'px-6 pb-6' : ''}`}><div className={`text-xs uppercase font-bold tracking-wide ${idea.coverImage ? 'text-slate-400' : 'text-slate-400'}`}>{idea.authorName}</div><div className={`text-[10px] font-bold ${idea.coverImage ? 'text-slate-500' : 'text-slate-400'}`}>{new Date(idea.createdAt).toLocaleDateString()}</div></div>
                          </Card>
                     ))}
                 </div>
@@ -937,49 +859,25 @@ const SearchPage = () => {
 const LandingPage = () => {
   const [publishedIdeas, setPublishedIdeas] = useState<Idea[]>([]);
   const { user } = useAppContext();
-  const [activeAnalysis, setActiveAnalysis] = useState<string | null>(null);
-  const [aiAnalysisResult, setAiAnalysisResult] = useState<aiService.ManagerAnalysisResult | null>(null);
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const all = db.getIdeas();
-    const topRated = all
-      .filter(i => i.status === IdeaStatus.PUBLISHED)
-      .map(i => {
-        const avgScore = i.ratings.length > 0 
-          ? i.ratings.reduce((acc, curr) => acc + curr.percentage, 0) / i.ratings.length
-          : 0;
-        return { ...i, avgScore };
-      })
-      .sort((a, b) => b.avgScore - a.avgScore)
-      .slice(0, 10);
-      
-    setPublishedIdeas(topRated);
+    const fetch = async () => {
+        const all = await db.getIdeas();
+        const topRated = all
+        .filter(i => i.status === IdeaStatus.PUBLISHED)
+        .map(i => {
+            const avgScore = i.ratings.length > 0 
+            ? i.ratings.reduce((acc, curr) => acc + curr.percentage, 0) / i.ratings.length
+            : 0;
+            return { ...i, avgScore };
+        })
+        .sort((a, b) => b.avgScore - a.avgScore)
+        .slice(0, 10);
+        setPublishedIdeas(topRated);
+    };
+    fetch();
   }, []);
-
-  const handleManagerAnalysis = async (idea: Idea) => {
-    if (analyzingId === idea.id) return;
-    setAnalyzingId(idea.id);
-    setAiAnalysisResult(null);
-    setActiveAnalysis(idea.id);
-    
-    const result = await aiService.generateManagerAnalysis(idea.title, idea.description);
-    setAiAnalysisResult(result);
-    setAnalyzingId(null);
-  };
-
-  const closeAnalysis = () => {
-    setActiveAnalysis(null);
-    setAiAnalysisResult(null);
-  }
-
-  const copyShareLink = (id: string) => {
-      const baseUrl = window.location.href.split('#')[0];
-      const url = `${baseUrl}#/view/${id}`;
-      navigator.clipboard.writeText(url);
-      alert("Shareable link copied to clipboard!");
-  };
 
   return (
     <div className="min-h-screen bg-eprom-bg text-slate-800 pt-16">
@@ -990,49 +888,26 @@ const LandingPage = () => {
           <h1 className="text-5xl md:text-8xl font-black mb-8 tracking-tighter text-slate-900 leading-[0.9]">
             EPROM <span className="text-slate-400 font-light">Idea bank.</span>
           </h1>
-          <p className="text-2xl text-slate-900 max-w-2xl mx-auto mb-4 leading-relaxed font-bold tracking-tight">
-            Innovating Energy. Empowering Ideas.
-          </p>
-          <p className="text-lg text-slate-500 max-w-3xl mx-auto mb-12 leading-relaxed font-medium">
-            EPROM Idea Bank is the innovation hub for the oil and gas sector.
-          </p>
+          <p className="text-2xl text-slate-900 max-w-2xl mx-auto mb-4 leading-relaxed font-bold tracking-tight">Innovating Energy. Empowering Ideas.</p>
+          <p className="text-lg text-slate-500 max-w-3xl mx-auto mb-12 leading-relaxed font-medium">EPROM Idea Bank is the innovation hub for the oil and gas sector.</p>
           {!user && (
-            <Link to="/auth">
-              <Button variant="primary" className="text-lg px-10 py-4 rounded-full bg-slate-900 hover:bg-slate-800 border-none shadow-2xl hover:shadow-xl hover:scale-105 transition-all text-white">Initialize Session</Button>
-            </Link>
+            <Link to="/auth"><Button variant="primary" className="text-lg px-10 py-4 rounded-full bg-slate-900 hover:bg-slate-800 border-none shadow-2xl hover:shadow-xl hover:scale-105 transition-all text-white">Initialize Session</Button></Link>
           )}
         </div>
       </div>
       <div className="max-w-7xl mx-auto px-4 py-20 relative z-10">
-        <div className="flex items-center mb-12 border-l-4 border-slate-900 pl-6">
-           <h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">Top 10 Innovations</h2>
-        </div>
+        <div className="flex items-center mb-12 border-l-4 border-slate-900 pl-6"><h2 className="text-3xl font-bold text-slate-900 tracking-tight uppercase">Top 10 Innovations</h2></div>
         {publishedIdeas.length === 0 ? (
-          <div className="text-center py-20 bg-white border border-slate-200 rounded-xl shadow-sm">
-            <div className="text-slate-400 text-lg">System Idle. Awaiting Innovation Inputs.</div>
-          </div>
+          <div className="text-center py-20 bg-white border border-slate-200 rounded-xl shadow-sm"><div className="text-slate-400 text-lg">System Idle. Awaiting Innovation Inputs.</div></div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {publishedIdeas.map((idea, index) => (
-              <Card 
-                  key={idea.id} 
-                  className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500 cursor-pointer"
-                  onClick={() => navigate(`/view/${idea.id}`)}
-              >
-                 {idea.coverImage && (
-                    <div className="absolute inset-0 z-0 bg-slate-950">
-                      <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-60" />
-                    </div>
-                 )}
+              <Card key={idea.id} className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500 cursor-pointer" onClick={() => navigate(`/view/${idea.id}`)}>
+                 {idea.coverImage && (<div className="absolute inset-0 z-0 bg-slate-950"><img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-60" /></div>)}
                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/90 to-transparent" />
-                 <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">
-                    {index + 1}
-                 </div>
+                 <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">{index + 1}</div>
                 <div className="absolute inset-0 z-10 p-8 flex flex-col justify-end transform transition-transform duration-300">
-                  <div className="flex justify-between items-start mb-3 transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                    <Badge color="blue" className="bg-blue-500/20 text-blue-100 border-blue-500/30 backdrop-blur-md">{idea.category}</Badge>
-                    <span className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">{new Date(idea.createdAt).toLocaleDateString()}</span>
-                  </div>
+                  <div className="flex justify-between items-start mb-3 transform translate-y-2 group-hover:translate-y-0 transition-transform"><Badge color="blue" className="bg-blue-500/20 text-blue-100 border-blue-500/30 backdrop-blur-md">{idea.category}</Badge><span className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">{new Date(idea.createdAt).toLocaleDateString()}</span></div>
                   <h3 className="text-3xl font-bold text-white mb-3 leading-none drop-shadow-xl tracking-tight">{idea.title}</h3>
                   <p className="text-slate-200 text-sm line-clamp-2 mb-6 font-medium drop-shadow-md opacity-90">{idea.description}</p>
                 </div>
@@ -1051,6 +926,7 @@ const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({ username: '', password: '', email: '', department: 'Engineering' });
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -1065,27 +941,27 @@ const AuthPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
     try {
       if (isLogin) {
-        const role = await login(formData.username, formData.password);
-        if (role === UserRole.ADMIN) {
-            navigate('/admin');
-        } else {
-            navigate('/dashboard');
-        }
+        const role = await login(formData.email, formData.password); // Changed to email
+        if (role === UserRole.ADMIN) navigate('/admin');
+        else navigate('/dashboard');
       } else {
-        db.registerUser({
+        await db.registerUser({
             username: formData.username,
             password: formData.password,
             email: formData.email,
             department: formData.department,
             role: UserRole.EMPLOYEE
         });
-        alert("Registration successful. Please wait for admin approval.");
+        alert("Registration successful. Please login.");
         setIsLogin(true);
       }
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -1095,15 +971,13 @@ const AuthPage = () => {
         <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? 'Login' : 'Register'}</h2>
         {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
         <form onSubmit={handleSubmit}>
-          <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />
+          {!isLogin && <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />}
+          <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
           <Input label="Password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
           {!isLogin && (
-            <>
-               <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
-               <Select label="Department" options={db.getSettings().departments} value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required />
-            </>
+            <Select label="Department" options={['Operations', 'Safety', 'Engineering', 'IT', 'HR']} value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required />
           )}
-          <Button type="submit" className="w-full mt-4">{isLogin ? 'Sign In' : 'Create Account'}</Button>
+          <Button type="submit" disabled={isLoading} className="w-full mt-4">{isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}</Button>
         </form>
         <p className="mt-4 text-center text-sm text-slate-500 cursor-pointer hover:text-eprom-blue" onClick={() => setIsLogin(!isLogin)}>
           {isLogin ? "Need an account? Register" : "Already have an account? Login"}
@@ -1114,7 +988,7 @@ const AuthPage = () => {
 };
 
 const IdeaFormPage = () => {
-    const { user } = useAppContext();
+    const { user, settings } = useAppContext();
     const navigate = useNavigate();
     const location = useLocation();
     const editingIdea = location.state?.idea as Idea | undefined;
@@ -1129,18 +1003,22 @@ const IdeaFormPage = () => {
     
     const [attachments, setAttachments] = useState<string[]>(editingIdea?.attachments || []);
     const [isUploading, setIsUploading] = useState(false);
+    const [isUploadingCover, setIsUploadingCover] = useState(false);
 
     const [templates, setTemplates] = useState<FormTemplate[]>([]);
     const { isRecording, startRecording, stopRecording } = useRecorder();
     const [isEnhancing, setIsEnhancing] = useState(false);
+    const [categories, setCategories] = useState<string[]>([]);
 
     useEffect(() => {
-        const t = db.getTemplates();
-        setTemplates(t);
-        if (!editingIdea && t.length > 0) {
-            setTemplateId(t[0].id);
-        }
-    }, [editingIdea]);
+        const fetch = async () => {
+            const t = await db.getTemplates();
+            setTemplates(t);
+            if (!editingIdea && t.length > 0) setTemplateId(t[0].id);
+            if (settings) setCategories(settings.categories);
+        };
+        fetch();
+    }, [editingIdea, settings]);
 
     const handleEnhance = async () => {
         if(!description) return;
@@ -1165,8 +1043,15 @@ const IdeaFormPage = () => {
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if(e.target.files?.[0]) {
-            const base64 = await db.fileToBase64(e.target.files[0]);
-            setCoverImage(base64);
+            setIsUploadingCover(true);
+            try {
+                const url = await db.uploadImageToFirebase(e.target.files[0]);
+                setCoverImage(url);
+            } catch (err: any) {
+                alert("Image Upload Failed: " + err.message);
+            } finally {
+                setIsUploadingCover(false);
+            }
         }
     }
 
@@ -1183,7 +1068,7 @@ const IdeaFormPage = () => {
                 alert(`Upload failed: ${err.message || "Unknown error"}. Check console for details.`);
             } finally {
                 setIsUploading(false);
-                e.target.value = ''; // Reset input to allow re-uploading same file if needed
+                e.target.value = ''; 
             }
         }
     }
@@ -1195,11 +1080,11 @@ const IdeaFormPage = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!user) return;
+        setIsUploading(true);
 
         const template = templates.find(t => t.id === templateId);
         let status = editingIdea?.status || IdeaStatus.SUBMITTED;
         
-        // Employee Logic: If previously rejected or needs revision, reset to SUBMITTED so manager sees it in queue
         if (user.role === UserRole.EMPLOYEE && (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED || status === IdeaStatus.DRAFT)) {
             status = IdeaStatus.SUBMITTED;
         }
@@ -1224,10 +1109,11 @@ const IdeaFormPage = () => {
             ratings: editingIdea?.ratings || [],
             comments: editingIdea?.comments || [],
             attachments: attachments,
-            managerFeedback: editingIdea?.managerFeedback // Preserve feedback history if desired, or clear it. Usually preserve until new status.
+            managerFeedback: editingIdea?.managerFeedback 
         };
 
-        db.saveIdea(newIdea);
+        await db.saveIdea(newIdea);
+        setIsUploading(false);
         navigate('/dashboard');
     }
 
@@ -1238,8 +1124,6 @@ const IdeaFormPage = () => {
             <div className="mb-8 border-b border-slate-200 pb-4 flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">{editingIdea ? 'Refine Protocol' : (parentIdea ? 'Collaborate on Protocol' : 'Initialize Protocol')}</h1>
-                    {parentIdea && <p className="text-blue-600 font-bold mt-1 text-sm flex items-center gap-2"><span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span> Contributing to: "{parentIdea.title}"</p>}
-                    {!parentIdea && !editingIdea && <p className="text-slate-500 mt-1 text-sm font-medium">Submit new innovation for operational review.</p>}
                 </div>
                 <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs uppercase">Cancel</Button>
             </div>
@@ -1250,7 +1134,7 @@ const IdeaFormPage = () => {
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <Input label="Protocol Title" value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Flare Gas Recovery" />
-                        <Select label="Category" options={db.getSettings().categories} value={category} onChange={e => setCategory(e.target.value)} required />
+                        <Select label="Category" options={categories} value={category} onChange={e => setCategory(e.target.value)} required />
                     </div>
                     
                     <div className="mb-6 relative">
@@ -1265,21 +1149,15 @@ const IdeaFormPage = () => {
                                 </button>
                              </div>
                         </div>
-                        <textarea 
-                            className="w-full px-4 py-3 bg-slate-50/50 border border-slate-300 rounded text-slate-900 placeholder-slate-400 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all min-h-[160px] text-sm leading-relaxed"
-                            value={description}
-                            onChange={e => setDescription(e.target.value)}
-                            required
-                            placeholder="Describe the operational challenge and proposed solution..."
-                        />
+                        <textarea className="w-full px-4 py-3 bg-slate-50/50 border border-slate-300 rounded text-slate-900 placeholder-slate-400 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all min-h-[160px] text-sm leading-relaxed" value={description} onChange={e => setDescription(e.target.value)} required placeholder="Describe the operational challenge and proposed solution..." />
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Visual Reference (Cover)</label>
                         <div className="flex items-start gap-6">
                             <label className="flex-shrink-0 cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-3 rounded text-xs font-bold uppercase transition-colors border border-slate-200 hover:border-slate-300 flex flex-col items-center justify-center w-32 h-32">
-                                <span>Select Img</span>
-                                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                                <span>{isUploadingCover ? '...' : 'Select Img'}</span>
+                                <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploadingCover} className="hidden" />
                             </label>
                             {coverImage ? (
                                 <div className="h-32 w-full flex-1 overflow-hidden rounded border border-slate-200 bg-slate-50 relative group">
@@ -1318,11 +1196,11 @@ const IdeaFormPage = () => {
                 )}
 
                 <Card className="p-8 border-none shadow-lg">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">03 // Supporting Documents</h3>
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">03 // Supporting Documents (Drive)</h3>
                     <div className="mb-4">
                         <label className="flex items-center justify-center w-full h-24 px-4 transition bg-white border-2 border-slate-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-slate-400 focus:outline-none bg-slate-50 hover:bg-slate-100">
                             <span className="flex items-center space-x-2 text-slate-500">
-                                {isUploading ? <span className="flex items-center gap-2 text-sm font-bold animate-pulse">Uploading...</span> : <span className="text-xs font-bold uppercase">Upload to Google Drive</span>}
+                                {isUploading ? <span className="flex items-center gap-2 text-sm font-bold animate-pulse">Uploading to Drive...</span> : <span className="text-xs font-bold uppercase">Upload to Google Drive</span>}
                             </span>
                             <input type="file" name="file_upload" className="hidden" disabled={isUploading} onChange={handleAttachmentUpload} />
                         </label>
@@ -1340,8 +1218,8 @@ const IdeaFormPage = () => {
                 </Card>
 
                 <div className="flex justify-end gap-4 pt-4">
-                    <Button type="submit" className="px-12 py-4 shadow-xl bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-widest text-sm">
-                        {editingIdea && (editingIdea.status === IdeaStatus.NEEDS_REVISION || editingIdea.status === IdeaStatus.REJECTED) ? 'Resubmit Protocol' : 'Launch Protocol'}
+                    <Button type="submit" disabled={isUploading || isUploadingCover} className="px-12 py-4 shadow-xl bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-widest text-sm">
+                        {isUploading ? 'Processing...' : (editingIdea && (editingIdea.status === IdeaStatus.NEEDS_REVISION || editingIdea.status === IdeaStatus.REJECTED) ? 'Resubmit Protocol' : 'Launch Protocol')}
                     </Button>
                 </div>
             </form>
@@ -1356,6 +1234,7 @@ const AdminPanel = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
     const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
+    // State for forms ... (same as before)
     const [newCat, setNewCat] = useState('');
     const [newDept, setNewDept] = useState('');
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -1374,30 +1253,29 @@ const AdminPanel = () => {
     const [newKPI, setNewKPI] = useState<Partial<RatingDimension>>({});
 
     useEffect(() => { refreshData(); }, []);
-    const refreshData = () => { setUsers(db.getUsers()); setTemplates(db.getTemplates()); };
-    const handleUserApproval = (uid: string, role: UserRole) => { db.updateUserStatus(uid, UserStatus.ACTIVE, role); refreshData(); };
-    const handleUserReject = (uid: string) => { db.updateUserStatus(uid, UserStatus.REJECTED); refreshData(); };
-    const handleDeleteUser = (uid: string) => { if(confirm("Are you sure? This cannot be undone.")) { db.deleteUser(uid); refreshData(); } };
-    const handleRoleChange = (uid: string, newRole: UserRole) => { db.updateUserRole(uid, newRole); refreshData(); };
-    const handleAddCategory = () => { if (newCat) { db.updateSettings({ ...settings, categories: [...settings.categories, newCat] }); refreshSettings(); setNewCat(''); } };
-    const handleAddDept = () => { if (newDept) { db.updateSettings({ ...settings, departments: [...settings.departments, newDept] }); refreshSettings(); setNewDept(''); } };
+    
+    const refreshData = async () => { 
+        setUsers(await db.getUsers()); 
+        setTemplates(await db.getTemplates()); 
+    };
+    
+    const handleUserApproval = async (uid: string, role: UserRole) => { await db.updateUserStatus(uid, UserStatus.ACTIVE, role); refreshData(); };
+    const handleUserReject = async (uid: string) => { await db.updateUserStatus(uid, UserStatus.REJECTED); refreshData(); };
+    const handleDeleteUser = async (uid: string) => { if(confirm("Are you sure? This cannot be undone.")) { await db.deleteUser(uid); refreshData(); } };
+    const handleRoleChange = async (uid: string, newRole: UserRole) => { await db.updateUserRole(uid, newRole); refreshData(); };
+    
+    const handleAddCategory = async () => { if (newCat && settings) { await db.updateSettings({ ...settings, categories: [...settings.categories, newCat] }); refreshSettings(); setNewCat(''); } };
+    const handleAddDept = async () => { if (newDept && settings) { await db.updateSettings({ ...settings, departments: [...settings.departments, newDept] }); refreshSettings(); setNewDept(''); } };
     
     const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => { 
-        if (e.target.files && e.target.files[0]) { 
+        if (e.target.files && e.target.files[0] && settings) { 
             setIsUploadingLogo(true);
             try { 
                 const file = e.target.files[0];
-                let url = await db.uploadToDrive(file);
-                
-                // Optimization: Try to convert to viewable URL if it's a direct download link
-                if (url.includes('export=download')) {
-                    url = url.replace('export=download', 'export=view');
-                }
-
-                const newSettings = { ...settings, logoUrl: url }; 
-                db.updateSettings(newSettings); 
+                const url = await db.uploadImageToFirebase(file);
+                await db.updateSettings({ ...settings, logoUrl: url }); 
                 refreshSettings(); 
-                alert("Logo updated successfully via Drive!");
+                alert("Logo updated successfully via Firebase!");
             } catch (err: any) { 
                 alert("Logo upload failed: " + err.message); 
             } finally {
@@ -1406,6 +1284,7 @@ const AdminPanel = () => {
         } 
     };
 
+    // ... (Template management same as before, just async calls)
     const addFieldToTemplate = () => { if(!editingField.label || !editingField.type) return; const newField: FormField = { id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(), label: editingField.label, type: editingField.type as any, required: editingField.required || false, options: editingField.options ? (editingField.options as any).split(',') : undefined }; setNewFields([...newFields, newField]); setEditingField({}); };
     const addKPI = () => { if (!newKPI.name || !newKPI.weight) return; const k: RatingDimension = { id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15), name: newKPI.name, description: newKPI.description || '', weight: Number(newKPI.weight) }; setCurrentKPIs([...currentKPIs, k]); setNewKPI({}); };
     const removeKPI = (id: string) => { setCurrentKPIs(currentKPIs.filter(k => k.id !== id)); };
@@ -1413,8 +1292,8 @@ const AdminPanel = () => {
     const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
     const handleEditTemplate = (t: FormTemplate) => { setEditingTemplateId(t.id); setNewTemplateName(t.name); setNewTemplateDesc(t.description); setNewFields(t.fields); setCurrentKPIs(t.ratingConfig || []); window.scrollTo({ top: 0, behavior: 'smooth' }); };
     const handleCancelEdit = () => { setEditingTemplateId(null); setNewTemplateName(''); setNewTemplateDesc(''); setNewFields([]); setCurrentKPIs(DEFAULT_KPIS); };
-    const saveTemplate = () => { if(!newTemplateName || newFields.length === 0) return; const t: FormTemplate = { id: editingTemplateId || Date.now().toString(), name: newTemplateName, description: newTemplateDesc, fields: newFields, ratingConfig: currentKPIs, isActive: true }; db.saveTemplate(t); handleCancelEdit(); refreshData(); };
-    const deleteTemplate = (id: string) => { if (confirm("Are you sure?")) { db.deleteTemplate(id); refreshData(); } }
+    const saveTemplate = async () => { if(!newTemplateName || newFields.length === 0) return; const t: FormTemplate = { id: editingTemplateId || Date.now().toString(), name: newTemplateName, description: newTemplateDesc, fields: newFields, ratingConfig: currentKPIs, isActive: true }; await db.saveTemplate(t); handleCancelEdit(); refreshData(); };
+    const deleteTemplate = async (id: string) => { if (confirm("Are you sure?")) { await db.deleteTemplate(id); refreshData(); } }
 
     const PendingUserRow = ({ u }: { u: User }) => {
       const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
@@ -1435,6 +1314,8 @@ const AdminPanel = () => {
       );
     }
 
+    if (!settings) return null;
+
     return (
         <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
             <div className="flex items-center justify-between mb-8"><h1 className="text-3xl font-bold text-slate-900 tracking-tight">Control Room</h1><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div><span className="text-xs font-bold text-red-500 uppercase tracking-widest">Admin Privileges Active</span></div></div>
@@ -1443,6 +1324,7 @@ const AdminPanel = () => {
                 <button onClick={() => setActiveTab('forms')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'forms' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>Protocol Builder {activeTab === 'forms' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}</button>
                 <button onClick={() => setActiveTab('settings')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'settings' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>System Config {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}</button>
             </div>
+            
             {activeTab === 'users' && (
                 <Card className="overflow-hidden border-none shadow-lg">
                     <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><span className="text-xs font-bold text-green-600 uppercase">Active</span></div></td></tr>))}</tbody></table></div>
@@ -1457,43 +1339,23 @@ const AdminPanel = () => {
                             <div className="space-y-3">
                                 {templates.map(t => (
                                     <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 border border-slate-200 rounded hover:border-slate-300">
-                                        <div>
-                                            <div className="text-xs font-bold text-slate-800">{t.name}</div>
-                                            <div className="text-[10px] text-slate-500">{t.fields.length} fields • {t.ratingConfig?.length || 0} KPIs</div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                           <button onClick={() => handleEditTemplate(t)} className="text-blue-600 text-xs font-bold uppercase">Edit</button>
-                                           <button onClick={() => deleteTemplate(t.id)} className="text-red-600 text-xs font-bold uppercase">Del</button>
-                                        </div>
+                                        <div><div className="text-xs font-bold text-slate-800">{t.name}</div><div className="text-[10px] text-slate-500">{t.fields.length} fields • {t.ratingConfig?.length || 0} KPIs</div></div>
+                                        <div className="flex gap-2"><button onClick={() => handleEditTemplate(t)} className="text-blue-600 text-xs font-bold uppercase">Edit</button><button onClick={() => deleteTemplate(t.id)} className="text-red-600 text-xs font-bold uppercase">Del</button></div>
                                     </div>
                                 ))}
                                 <Button onClick={() => { setEditingTemplateId(null); setNewTemplateName(''); setNewTemplateDesc(''); setNewFields([]); setCurrentKPIs(DEFAULT_KPIS); }} className="w-full mt-4 text-xs">New Template</Button>
                             </div>
                          </Card>
                      </div>
-
                      <div className="lg:col-span-2 space-y-8">
                          <Card className="p-8">
-                            <div className="flex justify-between items-start mb-6">
-                                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest">{editingTemplateId ? 'Edit Protocol Template' : 'Create Protocol Template'}</h3>
-                                {editingTemplateId && <Button variant="ghost" onClick={handleCancelEdit} className="text-xs text-red-500">Cancel Edit</Button>}
-                            </div>
-                            
-                            <div className="space-y-4 mb-8">
-                                <Input label="Template Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" />
-                                <Textarea label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Purpose of this form..." />
-                            </div>
-
+                            <div className="flex justify-between items-start mb-6"><h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest">{editingTemplateId ? 'Edit Protocol Template' : 'Create Protocol Template'}</h3>{editingTemplateId && <Button variant="ghost" onClick={handleCancelEdit} className="text-xs text-red-500">Cancel Edit</Button>}</div>
+                            <div className="space-y-4 mb-8"><Input label="Template Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" /><Textarea label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Purpose of this form..." /></div>
                             <div className="mb-8 border-t border-slate-100 pt-6">
                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Form Fields Schema</h4>
                                 <div className="space-y-3 mb-4">
                                     {newFields.map((f, i) => (
-                                        <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded">
-                                            <span className="text-[10px] font-mono text-slate-400 bg-white border border-slate-200 px-1 rounded">{f.type}</span>
-                                            <span className="text-sm font-bold text-slate-700 flex-1">{f.label}</span>
-                                            {f.required && <span className="text-[10px] text-red-500 font-bold uppercase">Req</span>}
-                                            <button onClick={() => setNewFields(newFields.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500">×</button>
-                                        </div>
+                                        <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded"><span className="text-[10px] font-mono text-slate-400 bg-white border border-slate-200 px-1 rounded">{f.type}</span><span className="text-sm font-bold text-slate-700 flex-1">{f.label}</span>{f.required && <span className="text-[10px] text-red-500 font-bold uppercase">Req</span>}<button onClick={() => setNewFields(newFields.filter((_, idx) => idx !== i))} className="text-slate-400 hover:text-red-500">×</button></div>
                                     ))}
                                 </div>
                                 <div className="grid grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded border border-slate-200">
@@ -1501,30 +1363,16 @@ const AdminPanel = () => {
                                     <div className="col-span-3"><Select label="Type" options={['text', 'textarea', 'number', 'select', 'checkbox', 'date']} value={editingField.type || ''} onChange={e => setEditingField({...editingField, type: e.target.value as any})} className="mb-0" /></div>
                                     <div className="col-span-2 flex items-center h-[42px]"><label className="flex items-center"><input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-2"/> <span className="text-xs font-bold uppercase text-slate-500">Req</span></label></div>
                                     <div className="col-span-3"><Button onClick={addFieldToTemplate} className="w-full text-xs">Add Field</Button></div>
-                                    {editingField.type === 'select' && (
-                                        <div className="col-span-12 mt-3">
-                                            <Input label="Options (comma separated)" value={(editingField.options as any) || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} className="mb-0" />
-                                        </div>
-                                    )}
+                                    {editingField.type === 'select' && (<div className="col-span-12 mt-3"><Input label="Options (comma separated)" value={(editingField.options as any) || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} className="mb-0" /></div>)}
                                 </div>
                             </div>
-
                             <div className="mb-8 border-t border-slate-100 pt-6">
                                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Evaluation KPIs</h4>
                                 <div className="space-y-3 mb-4">
                                     {currentKPIs.map((k) => (
-                                        <div key={k.id} className="flex justify-between items-center p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-900">
-                                            <div>
-                                                <div className="text-xs font-bold">{k.name} <span className="opacity-50">({k.weight}%)</span></div>
-                                                <div className="text-[10px] opacity-75">{k.description}</div>
-                                            </div>
-                                            <button onClick={() => removeKPI(k.id)} className="text-indigo-400 hover:text-indigo-700">×</button>
-                                        </div>
+                                        <div key={k.id} className="flex justify-between items-center p-3 bg-indigo-50 border border-indigo-100 rounded text-indigo-900"><div><div className="text-xs font-bold">{k.name} <span className="opacity-50">({k.weight}%)</span></div><div className="text-[10px] opacity-75">{k.description}</div></div><button onClick={() => removeKPI(k.id)} className="text-indigo-400 hover:text-indigo-700">×</button></div>
                                     ))}
-                                    <div className="flex justify-between items-center text-xs font-bold text-slate-500 pt-2">
-                                        <span>Total Weight: {totalWeight}%</span>
-                                        {totalWeight !== 100 && <span className="text-red-500">Warning: Should equal 100%</span>}
-                                    </div>
+                                    <div className="flex justify-between items-center text-xs font-bold text-slate-500 pt-2"><span>Total Weight: {totalWeight}%</span>{totalWeight !== 100 && <span className="text-red-500">Warning: Should equal 100%</span>}</div>
                                 </div>
                                 <div className="grid grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded border border-slate-200">
                                      <div className="col-span-4"><Input label="KPI Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} className="mb-0" /></div>
@@ -1532,11 +1380,8 @@ const AdminPanel = () => {
                                      <div className="col-span-4"><Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} className="mb-0" /></div>
                                      <div className="col-span-2"><Button onClick={addKPI} className="w-full text-xs">Add</Button></div>
                                 </div>
-                                <div className="mt-2 text-right">
-                                    <button onClick={resetKPIs} className="text-[10px] font-bold uppercase text-slate-400 hover:text-slate-600 underline">Reset to Default KPIs</button>
-                                </div>
+                                <div className="mt-2 text-right"><button onClick={resetKPIs} className="text-[10px] font-bold uppercase text-slate-400 hover:text-slate-600 underline">Reset to Default KPIs</button></div>
                             </div>
-
                             <Button onClick={saveTemplate} className="w-full py-4 text-sm tracking-widest">Save Protocol Template</Button>
                          </Card>
                      </div>
@@ -1547,38 +1392,20 @@ const AdminPanel = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <Card className="p-8">
                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-6">Departments</h3>
-                        <div className="flex flex-wrap gap-2 mb-6">
-                            {settings.departments.map(d => (
-                                <span key={d} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{d}</span>
-                            ))}
-                        </div>
-                        <div className="flex gap-2">
-                            <Input value={newDept} onChange={e => setNewDept(e.target.value)} placeholder="New Department" className="flex-1 mb-0" />
-                            <Button onClick={handleAddDept}>Add</Button>
-                        </div>
+                        <div className="flex flex-wrap gap-2 mb-6">{settings.departments.map(d => (<span key={d} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{d}</span>))}</div>
+                        <div className="flex gap-2"><Input value={newDept} onChange={e => setNewDept(e.target.value)} placeholder="New Department" className="flex-1 mb-0" /><Button onClick={handleAddDept}>Add</Button></div>
                     </Card>
-
                     <Card className="p-8">
                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-6">Categories</h3>
-                        <div className="flex flex-wrap gap-2 mb-6">
-                            {settings.categories.map(c => (
-                                <span key={c} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{c}</span>
-                            ))}
-                        </div>
-                        <div className="flex gap-2">
-                            <Input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="New Category" className="flex-1 mb-0" />
-                            <Button onClick={handleAddCategory}>Add</Button>
-                        </div>
+                        <div className="flex flex-wrap gap-2 mb-6">{settings.categories.map(c => (<span key={c} className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{c}</span>))}</div>
+                        <div className="flex gap-2"><Input value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="New Category" className="flex-1 mb-0" /><Button onClick={handleAddCategory}>Add</Button></div>
                     </Card>
-
                     <Card className="p-8 md:col-span-2">
                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-widest mb-6">Branding</h3>
                         <div className="flex items-center gap-6">
                             {settings.logoUrl ? <img src={settings.logoUrl} className="h-16 w-auto" alt="Logo" /> : <div className="h-16 w-16 bg-slate-200 rounded flex items-center justify-center text-slate-400 font-bold">LOGO</div>}
                             <div>
-                                <label className={`block text-xs font-bold uppercase mb-2 ${isUploadingLogo ? 'text-blue-500 animate-pulse' : 'text-slate-500'}`}>
-                                    {isUploadingLogo ? 'Uploading to Drive...' : 'Upload Company Logo'}
-                                </label>
+                                <label className={`block text-xs font-bold uppercase mb-2 ${isUploadingLogo ? 'text-blue-500 animate-pulse' : 'text-slate-500'}`}>{isUploadingLogo ? 'Uploading to Firebase...' : 'Upload Company Logo'}</label>
                                 <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={isUploadingLogo} className="text-sm text-slate-500 disabled:opacity-50" />
                             </div>
                         </div>
@@ -1589,56 +1416,24 @@ const AdminPanel = () => {
     );
 };
 
-// --- Main App Component ---
-
-const ProtectedRoute = ({ children, roles = [] }: { children: React.ReactNode, roles?: UserRole[] }) => {
-  const { user } = useAppContext();
-  const location = useLocation();
-
-  if (!user) {
-    return <Navigate to="/auth" state={{ from: location }} replace />;
-  }
-
-  if (roles.length > 0 && !roles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-};
-
 const App = () => {
   return (
     <HashRouter>
       <AppProvider>
-        <Navbar />
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/view/:id" element={<SharedIdeaPage />} />
-          
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/submit" element={
-            <ProtectedRoute roles={[UserRole.EMPLOYEE]}>
-              <IdeaFormPage />
-            </ProtectedRoute>
-          } />
-          <Route path="/collaboration" element={
-            <ProtectedRoute>
-              <CollaborationHub />
-            </ProtectedRoute>
-          } />
-          <Route path="/admin" element={
-            <ProtectedRoute roles={[UserRole.ADMIN]}>
-              <AdminPanel />
-            </ProtectedRoute>
-          } />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+        <div className="min-h-screen bg-eprom-bg text-slate-800 font-sans selection:bg-eprom-blue selection:text-white pb-20">
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/submit" element={<IdeaFormPage />} />
+            <Route path="/view/:id" element={<SharedIdeaPage />} />
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/collaboration" element={<CollaborationHub />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
       </AppProvider>
     </HashRouter>
   );

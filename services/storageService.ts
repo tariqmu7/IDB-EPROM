@@ -1,7 +1,17 @@
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc, 
+  query, where 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, 
+  onAuthStateChanged, User as FirebaseUser 
+} from 'firebase/auth';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { User, Idea, AppSettings, UserRole, UserStatus, IdeaStatus, FormTemplate } from '../types';
 
-// Provided Config
-export const firebaseConfig = (typeof window !== 'undefined' && (window as any).__firebase_config) ? JSON.parse((window as any).__firebase_config) : {
+// --- Firebase Configuration ---
+const firebaseConfig = (typeof window !== 'undefined' && (window as any).__firebase_config) ? JSON.parse((window as any).__firebase_config) : {
   apiKey: "AIzaSyAMOU-IK6UfKk75UR0P_Rs80z0uEsssQ9o",
   authDomain: "epromdeploy.firebaseapp.com",
   projectId: "epromdeploy",
@@ -11,359 +21,212 @@ export const firebaseConfig = (typeof window !== 'undefined' && (window as any).
   measurementId: "G-X5GVRLDBQQ"
 };
 
-const STORAGE_KEYS = {
-  USERS: 'eprom_users',
-  IDEAS: 'eprom_ideas',
-  SETTINGS: 'eprom_settings',
-  CURRENT_USER: 'eprom_current_user',
-  TEMPLATES: 'eprom_templates'
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const storage = getStorage(app);
+
+// --- Google Drive Script ---
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywVx70i2DXMf90cuMkE84Jn3rNlIr6dQJwXdoVx7l9kzzSXU-9uxn1MnrbWnJRRu6b/exec";
+
+// --- Constants ---
+const COLLECTIONS = {
+  USERS: 'users',
+  IDEAS: 'ideas',
+  SETTINGS: 'settings',
+  TEMPLATES: 'templates'
 };
 
-// IMPORTANT: Replace this with your NEW Web App URL if you created a new deployment.
-// If you updated the existing deployment version, you can keep this.
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJVxDjDdEQhLaj0m2zh0yMpowpuomeH97-wAHRXfodW-zY2MIU54jQtZCC4Lfb2UxW/exec";
+const DEFAULT_SETTINGS_ID = 'global_settings';
 
-// Initial Data Seeding
-const seedData = () => {
-  if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
-    const defaultSettings: AppSettings = {
-      appName: 'EPROM Innovation Hub',
-      logoUrl: '',
-      departments: ['Operations', 'Safety', 'Engineering', 'IT', 'HR'],
-      categories: ['Cost Reduction', 'Safety Improvement', 'Process Optimization', 'Innovation', 'Sustainability']
-    };
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(defaultSettings));
-  }
+// --- Auth Services ---
 
-  // Seed Users
-  if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-    const admin: User = {
-      id: 'admin-1',
-      username: 'admin',
-      email: 'admin@eprom.com',
-      department: 'IT',
-      role: UserRole.ADMIN,
-      status: UserStatus.ACTIVE,
-      password: 'password'
-    };
-    const manager: User = {
-      id: 'manager-1',
-      username: 'manager',
-      email: 'manager@eprom.com',
-      department: 'Operations',
-      role: UserRole.MANAGER,
-      status: UserStatus.ACTIVE,
-      password: 'password'
-    };
-    const emp1: User = {
-      id: 'emp-1',
-      username: 'j.doe',
-      email: 'j.doe@eprom.com',
-      department: 'Engineering',
-      role: UserRole.EMPLOYEE,
-      status: UserStatus.ACTIVE,
-      password: 'password'
-    };
-    const emp2: User = {
-      id: 'emp-2',
-      username: 's.connor',
-      email: 's.connor@eprom.com',
-      department: 'Safety',
-      role: UserRole.EMPLOYEE,
-      status: UserStatus.ACTIVE,
-      password: 'password'
-    };
-    // Guest User for Shared Links
-    const guest: User = {
-      id: 'guest-1',
-      username: 'guest',
-      email: 'guest@eprom.com',
-      department: 'External',
-      role: UserRole.GUEST,
-      status: UserStatus.ACTIVE,
-      password: 'guest'
-    };
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([admin, manager, emp1, emp2, guest]));
-  }
-
-  // Seed Default Template with new KPIs
-  if (!localStorage.getItem(STORAGE_KEYS.TEMPLATES)) {
-    const defaultTemplate: FormTemplate = {
-      id: 'default-1',
-      name: 'Standard Operational Improvement',
-      description: 'Standard form for submitting operational efficiency and cost reduction ideas.',
-      isActive: true,
-      ratingConfig: [
-        { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
-        { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation (resources, time).', weight: 20 },
-        { id: 'roi', name: 'Cost vs. Benefit', description: 'Estimated cost compared to expected benefits.', weight: 20 },
-        { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental improvement.', weight: 15 },
-        { id: 'risk', name: 'Risk Level', description: 'Operational, financial, or safety risks (High Score = Low Risk).', weight: 15 }
-      ],
-      fields: [
-        { id: 'benefits', label: 'Benefits / Value Proposition', type: 'textarea', required: true },
-        { id: 'cost', label: 'Estimated Cost', type: 'text', required: false },
-        { id: 'feasibility', label: 'Implementation Feasibility', type: 'select', options: ['Easy', 'Moderate', 'Complex'], required: true },
-        { id: 'priority', label: 'Priority Level', type: 'select', options: ['Low', 'Medium', 'High'], required: false },
-        { id: 'timeline', label: 'Expected Timeline', type: 'select', options: ['Short-term', 'Long-term'], required: false },
-        { id: 'collab', label: 'Collaboration Needed?', type: 'checkbox', required: false },
-        { id: 'tags', label: 'Tags/Keywords', type: 'text', required: false }
-      ]
-    };
-    localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify([defaultTemplate]));
-  }
-
-  // Seed Dummy Ideas (If empty)
-  if (!localStorage.getItem(STORAGE_KEYS.IDEAS)) {
-    const ideas: Idea[] = [
-      {
-        id: 'idea-1',
-        authorId: 'emp-1',
-        authorName: 'j.doe',
-        department: 'Engineering',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(), // 5 days ago
-        updatedAt: new Date().toISOString(),
-        title: 'AI-Driven Predictive Maintenance Protocol',
-        description: 'Implementation of a machine learning model to analyze vibration data from critical rotary equipment. By detecting anomalies early, we can schedule maintenance during planned downtimes, reducing unexpected failures by an estimated 40%.',
-        category: 'Innovation',
-        coverImage: 'https://images.unsplash.com/photo-1581092921461-eab6245b0262?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-        templateId: 'default-1',
-        templateName: 'Standard Operational Improvement',
-        dynamicData: {
-          benefits: 'Reduces downtime, saves repair costs.',
-          cost: '$50,000 Initial',
-          feasibility: 'Moderate',
-          priority: 'High',
-          timeline: 'Long-term',
-          collab: true,
-          tags: 'AI, Maintenance, Reliability'
-        },
-        tags: ['AI', 'Maintenance'],
-        status: IdeaStatus.PUBLISHED,
-        ratings: [
-          {
-            managerId: 'manager-1',
-            managerName: 'manager',
-            details: [{dimensionId: 'impact', score: 5}, {dimensionId: 'feasibility', score: 3}, {dimensionId: 'roi', score: 5}, {dimensionId: 'innovation', score: 5}, {dimensionId: 'risk', score: 4}],
-            totalScore: 4.4,
-            percentage: 88,
-            grade: 'A',
-            comment: 'Excellent strategic initiative. Fits perfectly with our digitalization roadmap.',
-            createdAt: new Date().toISOString()
-          }
-        ],
-        comments: []
-      },
-      {
-        id: 'idea-2',
-        authorId: 'emp-2',
-        authorName: 's.connor',
-        department: 'Safety',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), // 2 days ago
-        updatedAt: new Date().toISOString(),
-        title: 'Waste Heat Recovery System for Unit 4',
-        description: 'Proposal to install heat exchangers on the exhaust stack of Unit 4. This recovered thermal energy can preheat the feedwater, reducing overall fuel consumption by approximately 12%.',
-        category: 'Sustainability',
-        coverImage: 'https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-        templateId: 'default-1',
-        templateName: 'Standard Operational Improvement',
-        dynamicData: {
-          benefits: 'Fuel savings, reduced emissions.',
-          cost: '$120,000',
-          feasibility: 'Complex',
-          priority: 'Medium',
-          timeline: 'Long-term'
-        },
-        tags: ['Green', 'Energy'],
-        status: IdeaStatus.PUBLISHED,
-        ratings: [
-           {
-            managerId: 'manager-1',
-            managerName: 'manager',
-            details: [{dimensionId: 'impact', score: 4}, {dimensionId: 'feasibility', score: 2}, {dimensionId: 'roi', score: 5}, {dimensionId: 'innovation', score: 3}, {dimensionId: 'risk', score: 3}],
-            totalScore: 3.5,
-            percentage: 70,
-            grade: 'B',
-            comment: 'Good ROI potential, but engineering complexity is high. Proceed with feasibility study.',
-            createdAt: new Date().toISOString()
-          }
-        ],
-        comments: []
-      },
-      {
-        id: 'idea-3',
-        authorId: 'emp-1',
-        authorName: 'j.doe',
-        department: 'Engineering',
-        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 1).toISOString(),
-        updatedAt: new Date().toISOString(),
-        title: 'Digital Shift Handoff Log',
-        description: 'Replace paper logs with a tablet-based application for shift handovers. This ensures data integrity, searchability, and instant access to historical shift data for troubleshooting.',
-        category: 'Process Optimization',
-        templateId: 'default-1',
-        templateName: 'Standard Operational Improvement',
-        dynamicData: {
-          benefits: 'Better communication, data logs.',
-          cost: '$5,000',
-          feasibility: 'Easy',
-          priority: 'High',
-          timeline: 'Short-term'
-        },
-        tags: ['Digitalization', 'Operations'],
-        status: IdeaStatus.SUBMITTED,
-        ratings: [],
-        comments: []
-      },
-      {
-        id: 'idea-4',
-        authorId: 'emp-2',
-        authorName: 's.connor',
-        department: 'Safety',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        title: 'Automated Drone Inspection for Flares',
-        description: 'Using drones to inspect flare tips while live avoids the need for dangerous manual climbs or expensive scaffolding during shutdowns.',
-        category: 'Safety Improvement',
-        coverImage: 'https://images.unsplash.com/photo-1473968512647-3e447244af8f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80',
-        templateId: 'default-1',
-        templateName: 'Standard Operational Improvement',
-        dynamicData: {
-          benefits: 'Safety risk elimination, speed.',
-          cost: '$15,000 / inspection',
-          feasibility: 'Moderate',
-          collab: true,
-          tags: 'Drone, Safety'
-        },
-        tags: [],
-        status: IdeaStatus.APPROVED,
-        ratings: [],
-        comments: []
+export const subscribeToAuth = (callback: (user: User | null) => void) => {
+  return onAuthStateChanged(auth, async (firebaseUser) => {
+    if (firebaseUser) {
+      // Fetch extended user profile from Firestore
+      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid));
+      if (userDoc.exists()) {
+        callback(userDoc.data() as User);
+      } else {
+        // Fallback if doc missing (shouldn't happen in normal flow)
+        callback(null);
       }
-    ];
-    localStorage.setItem(STORAGE_KEYS.IDEAS, JSON.stringify(ideas));
-  }
-};
-
-seedData();
-
-// --- Service Methods ---
-
-export const getSettings = (): AppSettings => {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS) || '{}');
-};
-
-export const updateSettings = (settings: AppSettings) => {
-  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-};
-
-export const getUsers = (): User[] => {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
-};
-
-export const registerUser = (user: Omit<User, 'id' | 'status'>): User => {
-  const users = getUsers();
-  if (users.find(u => u.username === user.username)) throw new Error('Username taken');
-  
-  const newUser: User = {
-    ...user,
-    id: Date.now().toString(),
-    status: UserStatus.PENDING 
-  };
-  
-  users.push(newUser);
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  return newUser;
-};
-
-export const updateUserStatus = (userId: string, status: UserStatus, role?: UserRole) => {
-  const users = getUsers();
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx !== -1) {
-    users[idx].status = status;
-    if (role) {
-      users[idx].role = role;
+    } else {
+      callback(null);
     }
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  }
+  });
 };
 
-export const updateUserRole = (userId: string, role: UserRole) => {
-  const users = getUsers();
-  const idx = users.findIndex(u => u.id === userId);
-  if (idx !== -1) {
-    users[idx].role = role;
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  }
-};
-
-export const deleteUser = (userId: string) => {
-  const users = getUsers().filter(u => u.id !== userId);
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-};
-
-export const loginUser = (username: string, password: string): User => {
-  const users = getUsers();
-  const user = users.find(u => u.username === username && u.password === password);
+export const loginUser = async (email: string, password: string): Promise<User> => {
+  const userCredential = await signInWithEmailAndPassword(auth, email, password);
+  const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userCredential.user.uid));
   
-  if (!user) throw new Error('Invalid credentials');
+  if (!userDoc.exists()) throw new Error('User profile not found.');
+  
+  const user = userDoc.data() as User;
   if (user.status === UserStatus.PENDING) throw new Error('Account pending admin approval');
   if (user.status === UserStatus.REJECTED) throw new Error('Account rejected');
   
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
   return user;
 };
 
-export const logoutUser = () => {
-  localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+export const registerUser = async (userData: Omit<User, 'id' | 'status'>): Promise<User> => {
+  // Check if username taken (manual check as Auth uses email)
+  const q = query(collection(db, COLLECTIONS.USERS), where("username", "==", userData.username));
+  const querySnapshot = await getDocs(q);
+  if (!querySnapshot.empty) throw new Error('Username taken');
+
+  const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password || 'password');
+  
+  // Auto-assign Admin role for specific email for bootstrapping
+  const role = userData.email === 'admin@eprom.com' ? UserRole.ADMIN : UserRole.EMPLOYEE;
+  const status = userData.email === 'admin@eprom.com' ? UserStatus.ACTIVE : UserStatus.PENDING;
+
+  const newUser: User = {
+    ...userData,
+    id: userCredential.user.uid,
+    role,
+    status,
+    // Don't save password in Firestore
+    password: '' 
+  };
+
+  await setDoc(doc(db, COLLECTIONS.USERS, newUser.id), newUser);
+  return newUser;
 };
 
-export const getCurrentUser = (): User | null => {
-  const u = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-  return u ? JSON.parse(u) : null;
+export const logoutUser = async () => {
+  await signOut(auth);
 };
 
-export const getIdeas = (): Idea[] => {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.IDEAS) || '[]');
+export const getUserById = async (id: string): Promise<User | null> => {
+    const d = await getDoc(doc(db, COLLECTIONS.USERS, id));
+    return d.exists() ? d.data() as User : null;
 };
 
-export const saveIdea = (idea: Idea) => {
-  const ideas = getIdeas();
-  const idx = ideas.findIndex(i => i.id === idea.id);
-  if (idx !== -1) {
-    ideas[idx] = idea;
-  } else {
-    ideas.push(idea);
+export const getUsers = async (): Promise<User[]> => {
+  const snapshot = await getDocs(collection(db, COLLECTIONS.USERS));
+  return snapshot.docs.map(d => d.data() as User);
+};
+
+export const updateUserStatus = async (userId: string, status: UserStatus, role?: UserRole) => {
+  const ref = doc(db, COLLECTIONS.USERS, userId);
+  const data: any = { status };
+  if (role) data.role = role;
+  await updateDoc(ref, data);
+};
+
+export const updateUserRole = async (userId: string, role: UserRole) => {
+  await updateDoc(doc(db, COLLECTIONS.USERS, userId), { role });
+};
+
+export const deleteUser = async (userId: string) => {
+  await deleteDoc(doc(db, COLLECTIONS.USERS, userId));
+};
+
+// --- Idea Services ---
+
+export const getIdeas = async (): Promise<Idea[]> => {
+  const snapshot = await getDocs(collection(db, COLLECTIONS.IDEAS));
+  return snapshot.docs.map(d => d.data() as Idea);
+};
+
+export const saveIdea = async (idea: Idea) => {
+  await setDoc(doc(db, COLLECTIONS.IDEAS, idea.id), idea);
+};
+
+export const deleteIdea = async (id: string) => {
+  await deleteDoc(doc(db, COLLECTIONS.IDEAS, id));
+};
+
+// --- Settings Services ---
+
+export const getSettings = async (): Promise<AppSettings> => {
+  const d = await getDoc(doc(db, COLLECTIONS.SETTINGS, DEFAULT_SETTINGS_ID));
+  if (d.exists()) return d.data() as AppSettings;
+  
+  // Default fallback
+  const defaults: AppSettings = {
+    appName: 'EPROM Innovation Hub',
+    logoUrl: '',
+    departments: ['Operations', 'Safety', 'Engineering', 'IT', 'HR'],
+    categories: ['Cost Reduction', 'Safety Improvement', 'Process Optimization', 'Innovation', 'Sustainability']
+  };
+  // Save defaults to DB
+  await setDoc(doc(db, COLLECTIONS.SETTINGS, DEFAULT_SETTINGS_ID), defaults);
+  return defaults;
+};
+
+export const updateSettings = async (settings: AppSettings) => {
+  await setDoc(doc(db, COLLECTIONS.SETTINGS, DEFAULT_SETTINGS_ID), settings);
+};
+
+// --- Template Services ---
+
+export const getTemplates = async (): Promise<FormTemplate[]> => {
+  const snapshot = await getDocs(collection(db, COLLECTIONS.TEMPLATES));
+  const templates = snapshot.docs.map(d => d.data() as FormTemplate);
+  
+  if (templates.length === 0) {
+      // Seed default template
+      const defaultTemplate: FormTemplate = {
+        id: 'default-1',
+        name: 'Standard Operational Improvement',
+        description: 'Standard form for submitting operational efficiency and cost reduction ideas.',
+        isActive: true,
+        ratingConfig: [
+          { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
+          { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation (resources, time).', weight: 20 },
+          { id: 'roi', name: 'Cost vs. Benefit', description: 'Estimated cost compared to expected benefits.', weight: 20 },
+          { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental improvement.', weight: 15 },
+          { id: 'risk', name: 'Risk Level', description: 'Operational, financial, or safety risks (High Score = Low Risk).', weight: 15 }
+        ],
+        fields: [
+          { id: 'benefits', label: 'Benefits / Value Proposition', type: 'textarea', required: true },
+          { id: 'cost', label: 'Estimated Cost', type: 'text', required: false },
+          { id: 'feasibility', label: 'Implementation Feasibility', type: 'select', options: ['Easy', 'Moderate', 'Complex'], required: true },
+          { id: 'priority', label: 'Priority Level', type: 'select', options: ['Low', 'Medium', 'High'], required: false },
+          { id: 'timeline', label: 'Expected Timeline', type: 'select', options: ['Short-term', 'Long-term'], required: false },
+          { id: 'collab', label: 'Collaboration Needed?', type: 'checkbox', required: false },
+          { id: 'tags', label: 'Tags/Keywords', type: 'text', required: false }
+        ]
+      };
+      await setDoc(doc(db, COLLECTIONS.TEMPLATES, defaultTemplate.id), defaultTemplate);
+      return [defaultTemplate];
   }
-  localStorage.setItem(STORAGE_KEYS.IDEAS, JSON.stringify(ideas));
+  return templates;
 };
 
-export const deleteIdea = (id: string) => {
-  const ideas = getIdeas().filter(i => i.id !== id);
-  localStorage.setItem(STORAGE_KEYS.IDEAS, JSON.stringify(ideas));
+export const saveTemplate = async (template: FormTemplate) => {
+  await setDoc(doc(db, COLLECTIONS.TEMPLATES, template.id), template);
 };
 
-// Templates
-export const getTemplates = (): FormTemplate[] => {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.TEMPLATES) || '[]');
+export const deleteTemplate = async (id: string) => {
+  await deleteDoc(doc(db, COLLECTIONS.TEMPLATES, id));
 };
 
-export const saveTemplate = (template: FormTemplate) => {
-  const templates = getTemplates();
-  const idx = templates.findIndex(t => t.id === template.id);
-  if (idx !== -1) {
-    templates[idx] = template;
-  } else {
-    templates.push(template);
-  }
-  localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
+// --- File Services ---
+
+// 1. Firebase Storage for Images (Cover Images, Logos)
+export const uploadImageToFirebase = async (file: File): Promise<string> => {
+    // Basic validation
+    if (!file.type.startsWith('image/')) {
+        throw new Error('Only image files are allowed for this field.');
+    }
+    
+    // Create a unique path: images/{timestamp}_{filename}
+    const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
+    
+    // Upload
+    const snapshot = await uploadBytes(storageRef, file);
+    
+    // Get URL
+    const url = await getDownloadURL(snapshot.ref);
+    return url;
 };
 
-export const deleteTemplate = (id: string) => {
-  const templates = getTemplates().filter(t => t.id !== id);
-  localStorage.setItem(STORAGE_KEYS.TEMPLATES, JSON.stringify(templates));
-};
-
-// Helper for file to base64
+// 2. Google Drive for Attachments (PDFs, Docs) via App Script
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -374,7 +237,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export const uploadToDrive = async (file: File): Promise<string> => {
-  // Check file size (5MB limit)
+  // Check file size (5MB limit for App Script)
   if (file.size > 5 * 1024 * 1024) {
     throw new Error("File size exceeds 5MB limit. Please upload a smaller file.");
   }
@@ -386,24 +249,18 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     const fileName = file.name || "uploaded_file";
     const mimeType = file.type || "application/octet-stream";
 
-    // Provide various naming conventions to support unknown Google Apps Script implementations
-    // This payload sends aliases to ensure the script finds what it needs
     const payload = {
-      // Standard properties
       filename: fileName,
       name: fileName,
       mimeType: mimeType,
       type: mimeType,
-      
-      // Data fields
       data: content,
       base64: content,
-      file: content // Some scripts expect 'file'
+      file: content
     };
 
-    console.log("Uploading file...", { fileName, mimeType, size: content.length });
+    console.log("Uploading file to Drive...", { fileName, mimeType });
 
-    // Use plain text content type to avoid complex CORS preflight issues
     const response = await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
       headers: {
@@ -417,31 +274,27 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     }
 
     const text = await response.text();
-    console.log("Upload script response:", text); // Debug log
-
     let result;
     try {
         result = JSON.parse(text);
     } catch (e) {
         console.error("Invalid JSON response:", text);
-        throw new Error("Invalid response format from server. Check console.");
+        throw new Error("Invalid response format from server.");
     }
 
-    // Handle both "error" (standard) and "message" (GAS default exception) fields
     if (result.error || result.status === 'error') {
         throw new Error(result.error || result.message || "Unknown server error");
     }
 
-    // Check common property names for the URL
     const fileUrl = result.url || result.fileUrl || result.link || result.downloadUrl;
 
     if (!fileUrl) {
-        throw new Error("No URL returned from upload script. Response was: " + JSON.stringify(result));
+        throw new Error("No URL returned from upload script.");
     }
 
     return fileUrl;
   } catch (error: any) {
-    console.error("Upload failed", error);
+    console.error("Drive Upload failed", error);
     throw new Error(error.message || "Upload failed");
   }
 };
