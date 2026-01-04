@@ -69,7 +69,17 @@ const seedData = () => {
       status: UserStatus.ACTIVE,
       password: 'password'
     };
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([admin, manager, emp1, emp2]));
+    // Guest User for Shared Links
+    const guest: User = {
+      id: 'guest-1',
+      username: 'guest',
+      email: 'guest@eprom.com',
+      department: 'External',
+      role: UserRole.GUEST,
+      status: UserStatus.ACTIVE,
+      password: 'guest'
+    };
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([admin, manager, emp1, emp2, guest]));
   }
 
   // Seed Default Template with new KPIs

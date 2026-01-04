@@ -341,7 +341,7 @@ const SearchPage = () => {
             const isMine = user?.id === idea.authorId;
             const isPublic = idea.status === IdeaStatus.PUBLISHED;
             const isCollab = idea.status === IdeaStatus.APPROVED && (idea.dynamicData['collab'] || (idea as any).collaborationNeeded);
-            const canSee = isMine || isPublic || isCollab || user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER;
+            const canSee = isMine || isPublic || isCollab || user?.role === UserRole.ADMIN || user?.role === UserRole.MANAGER || user?.role === UserRole.GUEST;
 
             if (!canSee) return false;
 
@@ -374,9 +374,9 @@ const SearchPage = () => {
                              {idea.coverImage && (
                                 <>
                                   <div className="absolute inset-0 z-0 bg-slate-950">
-                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-30" />
+                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-50" />
                                   </div>
-                                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-900/40" />
+                                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
                                 </>
                              )}
                              
@@ -442,7 +442,9 @@ const LandingPage = () => {
   }
 
   const copyShareLink = (id: string) => {
-      const url = `${window.location.origin}/#/view/${id}`;
+      // Use pathname to ensure we include the repo name (e.g., /IDB-EPROM/) for GitHub Pages
+      const baseUrl = window.location.href.split('#')[0];
+      const url = `${baseUrl}#/view/${id}`;
       navigator.clipboard.writeText(url);
       alert("Shareable link copied to clipboard!");
   };
@@ -456,7 +458,7 @@ const LandingPage = () => {
         <div className="relative z-10 max-w-7xl mx-auto text-center">
           <Badge color="gray" className="mb-8 inline-block bg-white/80 border-slate-200 shadow-sm text-slate-600 backdrop-blur-sm">Enterprise Innovation System</Badge>
           <h1 className="text-5xl md:text-8xl font-black mb-8 tracking-tighter text-slate-900 leading-[0.9]">
-            EPROM Idea <span className="text-slate-400 font-light">bank.</span>
+            EPROM <span className="text-slate-400 font-light">Idea bank.</span>
           </h1>
           <p className="text-2xl text-slate-900 max-w-2xl mx-auto mb-4 leading-relaxed font-bold tracking-tight">
             Innovating Energy. Empowering Ideas.
@@ -493,11 +495,11 @@ const LandingPage = () => {
                  {/* Background Image Logic */}
                  {idea.coverImage && (
                     <div className="absolute inset-0 z-0 bg-slate-950">
-                      <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-30" />
+                      <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-60" />
                     </div>
                  )}
                  {/* Dark Overlay (Fade) */}
-                 <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-900/40" />
+                 <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/90 to-transparent" />
 
                  {/* Rank Badge */}
                  <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">
@@ -606,840 +608,430 @@ const LandingPage = () => {
   );
 };
 
-// 2. Authentication (Optimized)
+// 2. Auth Page
 const AuthPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({ username: '', password: '', email: '', department: 'Operations' });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const { login, settings } = useAppContext();
+  const { login, user } = useAppContext();
   const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  useEffect(() => {
+    if (user) navigate('/dashboard');
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
-    
     try {
-      if (isLogin) {
-        await login(formData.username, formData.password);
-        const u = db.getCurrentUser();
-        if(u?.role === UserRole.ADMIN) {
-            navigate('/admin');
+        if (isRegistering) {
+            db.registerUser({ username, password, email: `${username}@eprom.com`, department: 'General', role: UserRole.EMPLOYEE });
+            alert("Registration successful. Please wait for admin approval.");
+            setIsRegistering(false);
         } else {
+            await login(username, password);
             navigate('/dashboard');
         }
-      } else {
-        db.registerUser({
-          username: formData.username,
-          password: formData.password,
-          email: formData.email,
-          department: formData.department,
-          role: UserRole.EMPLOYEE // Default role
-        });
-        setSuccess('Registration successful! Please wait for Admin approval.');
-        setIsLogin(true);
-      }
     } catch (err: any) {
       setError(err.message);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-eprom-bg px-4 relative pt-16">
-      <Card className="w-full max-w-md p-10 relative z-10 bg-white shadow-2xl border-none rounded-2xl fade-in">
-        <div className="text-center mb-10">
-           {settings.logoUrl && (
-               <img src={settings.logoUrl} alt="Logo" className="h-16 w-auto mx-auto mb-6 object-contain" />
-           )}
-           <h2 className="text-2xl font-bold text-slate-900 mb-2 uppercase tracking-wide">{isLogin ? 'Secure Access' : 'New Personnel'}</h2>
-           <p className="text-slate-400 text-xs uppercase tracking-widest font-bold">Authorized Personnel Only</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <Card className="w-full max-w-md p-8 border-none shadow-2xl">
+        <div className="text-center mb-8">
+           <h1 className="text-2xl font-bold text-slate-900 mb-2">EPROM <span className="text-slate-400">ACCESS</span></h1>
+           <p className="text-slate-500 text-xs uppercase tracking-widest">Secure Gateway</p>
         </div>
         
-        {error && <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded text-sm mb-6 text-center">{error}</div>}
-        {success && <div className="bg-green-50 border border-green-200 text-green-600 p-3 rounded text-sm mb-6 text-center">{success}</div>}
+        {error && <div className="mb-6 bg-red-50 text-red-600 p-3 rounded text-sm text-center border border-red-100">{error}</div>}
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input 
             label="Username" 
-            value={formData.username} 
-            onChange={e => setFormData({...formData, username: e.target.value})} 
+            value={username} 
+            onChange={e => setUsername(e.target.value)} 
+            placeholder="Enter identity..." 
             required 
           />
           <Input 
             label="Password" 
             type="password" 
-            value={formData.password} 
-            onChange={e => setFormData({...formData, password: e.target.value})} 
+            value={password} 
+            onChange={e => setPassword(e.target.value)} 
+            placeholder="Enter credentials..." 
             required 
           />
-          {!isLogin && (
-            <>
-              <Input 
-                label="Email" 
-                type="email" 
-                value={formData.email} 
-                onChange={e => setFormData({...formData, email: e.target.value})} 
-                required 
-              />
-              <Select 
-                label="Department"
-                options={settings.departments}
-                value={formData.department}
-                onChange={e => setFormData({...formData, department: e.target.value})}
-                required
-              />
-            </>
-          )}
-          
-          <Button type="submit" className="w-full justify-center mt-8 py-3.5 text-sm font-bold uppercase tracking-widest bg-slate-900 text-white hover:bg-slate-800 shadow-lg">{isLogin ? 'Authenticate' : 'Request Clearance'}</Button>
+          <Button type="submit" className="w-full shadow-lg mt-4">{isRegistering ? 'Submit Application' : 'Authenticate'}</Button>
         </form>
         
-        <div className="mt-8 pt-6 border-t border-slate-100 text-center text-xs text-slate-400 uppercase tracking-wider font-bold">
-          {isLogin ? "No credentials? " : "Have ID? "}
-          <button onClick={() => setIsLogin(!isLogin)} className="text-slate-900 font-bold hover:text-slate-600 transition-colors ml-2">
-            {isLogin ? 'Request Access' : 'Login'}
-          </button>
+        <div className="mt-6 text-center">
+            <button onClick={() => setIsRegistering(!isRegistering)} className="text-xs text-slate-400 hover:text-slate-900 underline underline-offset-4">
+                {isRegistering ? 'Back to Login' : 'Request Access / Register'}
+            </button>
         </div>
       </Card>
     </div>
   );
 };
 
-// 3. Idea Form / Submission Page (Optimized)
-const IdeaFormPage = () => {
-  const { user } = useAppContext();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const editIdea = location.state?.idea as Idea | undefined;
-  const parentIdea = location.state?.parentIdea as Idea | undefined;
-
-  const [templates, setTemplates] = useState<FormTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  
-  // Form State
-  const [title, setTitle] = useState(editIdea?.title || '');
-  const [description, setDescription] = useState(editIdea?.description || '');
-  const [category, setCategory] = useState(editIdea?.category || '');
-  const [coverImage, setCoverImage] = useState<string>(editIdea?.coverImage || '');
-  const [dynamicData, setDynamicData] = useState<Record<string, any>>(editIdea?.dynamicData || {});
-  
-  // UI State
-  const [isEnhancing, setIsEnhancing] = useState(false);
-  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
-  const { isRecording, startRecording, stopRecording } = useRecorder();
-  const [isTranscribing, setIsTranscribing] = useState(false);
+// 3. Shared View Page
+const SharedIdeaPage = () => {
+  const { id } = useParams();
+  const [idea, setIdea] = useState<Idea | null>(null);
 
   useEffect(() => {
-    const t = db.getTemplates();
-    setTemplates(t);
-    if (editIdea) {
-        setSelectedTemplateId(editIdea.templateId);
-    } else if (t.length > 0 && !selectedTemplateId) {
-        setSelectedTemplateId(t[0].id);
-    }
-  }, [editIdea]);
+    const all = db.getIdeas();
+    const found = all.find(i => i.id === id);
+    setIdea(found || null);
+  }, [id]);
 
-  const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
-
-  // Update dynamic fields when template changes (only if not editing or explicit change)
-  useEffect(() => {
-      if (!editIdea && selectedTemplate) {
-          // Keep existing data if keys match, else reset? 
-          // For simplicity, we just keep what's in dynamicData
-      }
-  }, [selectedTemplate]);
-
-  const handleEnhance = async () => {
-    if (!description) return;
-    setIsEnhancing(true);
-    const enhanced = await aiService.enhanceIdeaText(description);
-    setDescription(enhanced);
-    setIsEnhancing(false);
-  };
-
-  const handleVoiceInput = async () => {
-    if (!isRecording) {
-      await startRecording();
-    } else {
-      setIsTranscribing(true);
-      const audioData = await stopRecording();
-      if (audioData) {
-        const text = await aiService.transcribeAudio(audioData.base64, audioData.mimeType);
-        setDescription(prev => prev + (prev ? ' ' : '') + text);
-      }
-      setIsTranscribing(false);
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          const file = e.target.files[0];
-          try {
-            const base64 = await db.fileToBase64(file);
-            setCoverImage(base64);
-
-            // Auto-analyze if description is empty
-            if (!description) {
-                setIsAnalyzingImage(true);
-                const analysis = await aiService.analyzeImage(base64, file.type);
-                setDescription(analysis);
-                setIsAnalyzingImage(false);
-            }
-          } catch (e) {
-            console.error("Image upload failed", e);
-          }
-      }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!user || !selectedTemplate) return;
-
-      const newIdea: Idea = {
-          id: editIdea?.id || Date.now().toString(),
-          authorId: user.id,
-          authorName: user.username,
-          department: user.department,
-          createdAt: editIdea?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          title,
-          description,
-          category: category || 'Innovation',
-          coverImage: coverImage || undefined,
-          templateId: selectedTemplate.id,
-          templateName: selectedTemplate.name,
-          dynamicData,
-          tags: [], 
-          status: editIdea ? IdeaStatus.SUBMITTED : IdeaStatus.SUBMITTED,
-          ratings: editIdea?.ratings || [],
-          comments: editIdea?.comments || [],
-          parentIdeaId: parentIdea?.id
-      };
-      
-      db.saveIdea(newIdea);
-      navigate('/dashboard');
-  };
+  if (!idea) return <div className="min-h-screen flex items-center justify-center text-slate-400 uppercase tracking-widest">Record not found or access denied.</div>;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-24 fade-in">
-        <Card className="p-8 border-none shadow-2xl relative overflow-hidden bg-white">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-slate-900 via-blue-800 to-slate-900"></div>
+    <div className="min-h-screen bg-slate-50 py-24 px-4">
+        <div className="max-w-4xl mx-auto">
+             <Card className="overflow-hidden shadow-2xl border-none">
+                 {idea.coverImage && (
+                     <div className="h-64 relative">
+                         <img src={idea.coverImage} className="w-full h-full object-cover" />
+                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-8">
+                             <h1 className="text-4xl font-bold text-white drop-shadow-lg">{idea.title}</h1>
+                         </div>
+                     </div>
+                 )}
+                 <div className="p-8 md:p-12 bg-white">
+                     {!idea.coverImage && <h1 className="text-3xl font-bold text-slate-900 mb-6">{idea.title}</h1>}
+                     
+                     <div className="flex gap-4 mb-8">
+                         <Badge color="blue">{idea.category}</Badge>
+                         <Badge color="gray">{idea.status}</Badge>
+                         <span className="text-xs text-slate-500 uppercase font-bold tracking-wider self-center">By {idea.authorName}</span>
+                     </div>
+
+                     <div className="prose prose-slate max-w-none mb-12">
+                         <p className="text-lg text-slate-600 leading-relaxed font-medium">{idea.description}</p>
+                     </div>
+
+                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6 p-6 bg-slate-50 rounded border border-slate-100 mb-8">
+                        <div>
+                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Impact/Benefit</span>
+                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.benefits || 'N/A'}</span>
+                        </div>
+                        <div>
+                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cost Est.</span>
+                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.cost || 'N/A'}</span>
+                        </div>
+                        <div>
+                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Timeline</span>
+                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.timeline || 'N/A'}</span>
+                        </div>
+                         <div>
+                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Feasibility</span>
+                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.feasibility || 'N/A'}</span>
+                        </div>
+                     </div>
+                     
+                     <div className="text-center pt-8 border-t border-slate-100">
+                         <p className="text-slate-400 text-xs uppercase tracking-widest mb-4">EPROM Innovation Registry</p>
+                         <Link to="/">
+                            <Button variant="secondary" className="text-xs uppercase">Return to Hub</Button>
+                         </Link>
+                     </div>
+                 </div>
+             </Card>
+        </div>
+    </div>
+  );
+};
+
+// 4. Submission / Edit Form
+const IdeaFormPage = () => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { user } = useAppContext();
+    const { isRecording, startRecording, stopRecording } = useRecorder();
+    
+    // State initialization
+    const existingIdea = location.state?.idea as Idea | undefined;
+    const parentIdea = location.state?.parentIdea as Idea | undefined;
+    
+    // Default Template (ID: default-1)
+    const [title, setTitle] = useState(existingIdea?.title || '');
+    const [category, setCategory] = useState(existingIdea?.category || 'Innovation');
+    const [description, setDescription] = useState(existingIdea?.description || '');
+    const [coverImage, setCoverImage] = useState<string | undefined>(existingIdea?.coverImage);
+    
+    // Dynamic Fields (Hardcoded for "Standard Operational Improvement" template for simplicity)
+    const [benefits, setBenefits] = useState(existingIdea?.dynamicData?.benefits || '');
+    const [cost, setCost] = useState(existingIdea?.dynamicData?.cost || '');
+    const [feasibility, setFeasibility] = useState(existingIdea?.dynamicData?.feasibility || 'Moderate');
+    const [timeline, setTimeline] = useState(existingIdea?.dynamicData?.timeline || 'Short-term');
+    const [collab, setCollab] = useState(existingIdea?.dynamicData?.collab || false);
+
+    const [isEnhancing, setIsEnhancing] = useState(false);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const base64 = await db.fileToBase64(e.target.files[0]);
+            setCoverImage(base64);
             
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">{editIdea ? 'Refine Protocol' : 'Initialize Protocol'}</h1>
-                <p className="text-slate-500 text-sm mt-1 uppercase tracking-wide">
-                    {parentIdea ? `Contributing to: ${parentIdea.title}` : 'Submit new innovation record'}
-                </p>
+            // Auto-analyze image to fill description if empty
+            if (!description) {
+                const analysis = await aiService.analyzeImage(base64.split(',')[1], e.target.files[0].type);
+                setDescription(prev => prev ? prev : analysis);
+            }
+        }
+    };
+
+    const handleVoiceInput = async () => {
+        if (isRecording) {
+            const audio = await stopRecording();
+            if (audio) {
+                const text = await aiService.transcribeAudio(audio.base64, audio.mimeType);
+                setDescription(prev => prev + " " + text);
+            }
+        } else {
+            await startRecording();
+        }
+    };
+
+    const handleEnhanceText = async () => {
+        if (!description) return;
+        setIsEnhancing(true);
+        const enhanced = await aiService.enhanceIdeaText(description);
+        setDescription(enhanced);
+        setIsEnhancing(false);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user) return;
+
+        const newIdea: Idea = {
+            id: existingIdea?.id || Date.now().toString(),
+            authorId: user.id,
+            authorName: user.username,
+            department: user.department,
+            createdAt: existingIdea?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            title,
+            description,
+            category,
+            coverImage,
+            status: existingIdea?.status || IdeaStatus.SUBMITTED,
+            templateId: 'default-1',
+            templateName: 'Standard Operational Improvement',
+            parentIdeaId: parentIdea?.id,
+            dynamicData: {
+                benefits,
+                cost,
+                feasibility,
+                timeline,
+                collab
+            },
+            tags: [], // Could add tag input
+            ratings: existingIdea?.ratings || [],
+            comments: existingIdea?.comments || []
+        };
+
+        db.saveIdea(newIdea);
+        navigate('/dashboard');
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto px-4 py-24 fade-in">
+            <div className="mb-8 border-b border-slate-200 pb-4 flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">{existingIdea ? 'Edit Protocol' : (parentIdea ? 'Collaborate on Protocol' : 'Initialize New Protocol')}</h1>
+                    {parentIdea && <p className="text-slate-500 mt-1">Contributing to: <span className="font-bold">{parentIdea.title}</span></p>}
+                </div>
+                <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs uppercase">Cancel</Button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
                 {/* Core Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="space-y-6">
-                        <Input label="Title" value={title} onChange={e => setTitle(e.target.value)} required placeholder="Project Designation" />
-                        
-                        <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Protocol Template</label>
-                            <select 
-                                value={selectedTemplateId} 
-                                onChange={e => setSelectedTemplateId(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 transition-all"
-                                disabled={!!editIdea}
-                            >
-                                {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
+                <Card className="p-8 border-none shadow-lg">
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Core Data</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input label="Protocol Title" value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Predictive Valve Maintenance" />
+                        <Select label="Category" options={['Cost Reduction', 'Safety Improvement', 'Process Optimization', 'Innovation', 'Sustainability']} value={category} onChange={e => setCategory(e.target.value)} required />
+                    </div>
+                    
+                    <div className="mb-5">
+                        <div className="flex justify-between items-end mb-1.5">
+                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Description / Hypothesis</label>
+                             <div className="flex gap-2">
+                                <button type="button" onClick={handleVoiceInput} className={`text-[10px] font-bold uppercase flex items-center gap-1 ${isRecording ? 'text-red-600 animate-pulse' : 'text-slate-400 hover:text-slate-900'}`}>
+                                    <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-600' : 'bg-slate-400'}`}></span>
+                                    {isRecording ? 'Stop Recording' : 'Voice Input'}
+                                </button>
+                                <button type="button" onClick={handleEnhanceText} disabled={isEnhancing} className="text-[10px] font-bold uppercase text-indigo-500 hover:text-indigo-700 disabled:opacity-50">
+                                    {isEnhancing ? 'Optimizing...' : 'AI Enhance'}
+                                </button>
+                             </div>
                         </div>
-
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Category</label>
-                             <select 
-                                value={category} 
-                                onChange={e => setCategory(e.target.value)}
-                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 transition-all appearance-none"
-                            >
-                                <option value="">Select Category</option>
-                                <option value="Cost Reduction">Cost Reduction</option>
-                                <option value="Safety Improvement">Safety Improvement</option>
-                                <option value="Process Optimization">Process Optimization</option>
-                                <option value="Innovation">Innovation</option>
-                                <option value="Sustainability">Sustainability</option>
-                            </select>
-                        </div>
+                        <textarea 
+                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 placeholder-slate-400 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all min-h-[120px]"
+                            value={description}
+                            onChange={e => setDescription(e.target.value)}
+                            required
+                        />
                     </div>
 
-                    <div className="relative group">
-                         <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Visual Reference</label>
-                         <div className={`w-full h-64 border-2 border-dashed rounded-lg flex flex-col items-center justify-center relative overflow-hidden transition-all ${coverImage ? 'border-slate-900' : 'border-slate-300 hover:border-slate-400 bg-slate-50'}`}>
-                             {coverImage ? (
-                                 <img src={coverImage} alt="Preview" className="w-full h-full object-cover" />
-                             ) : (
-                                 <div className="text-center p-4">
-                                     <div className="text-slate-400 mb-2">
-                                       <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                     </div>
-                                     <span className="text-xs text-slate-500 uppercase font-bold">Upload Cover Photo</span>
-                                     <span className="block text-[10px] text-slate-400 mt-1">Drag & Drop or Click to Browse</span>
-                                 </div>
-                             )}
-                             <input type="file" onChange={handleImageUpload} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
+                    <div className="mb-5">
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Supporting Imagery</label>
+                        <div className="flex items-center gap-4">
+                            <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded text-xs font-bold uppercase transition-colors">
+                                Upload Image
+                                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                            </label>
+                            {coverImage && <span className="text-xs text-green-600 font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Image Attached</span>}
+                        </div>
+                        {coverImage && (
+                            <div className="mt-4 h-40 w-full md:w-1/2 overflow-hidden rounded border border-slate-200">
+                                <img src={coverImage} className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                    </div>
+                </Card>
+
+                {/* Template Fields */}
+                <Card className="p-8 border-none shadow-lg">
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Operational Impact</h3>
+                    <Textarea label="Expected Benefits" value={benefits} onChange={e => setBenefits(e.target.value)} required placeholder="Quantify if possible..." />
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input label="Estimated Cost" value={cost} onChange={e => setCost(e.target.value)} placeholder="Approx. USD" />
+                        <Select label="Feasibility" options={['Easy', 'Moderate', 'Complex']} value={feasibility} onChange={e => setFeasibility(e.target.value)} required />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                         <Select label="Implementation Timeline" options={['Short-term', 'Long-term']} value={timeline} onChange={e => setTimeline(e.target.value)} required />
+                         <div className="flex items-center h-full pt-6">
+                             <label className="flex items-center cursor-pointer">
+                                 <input type="checkbox" checked={collab} onChange={e => setCollab(e.target.checked)} className="form-checkbox h-5 w-5 text-eprom-blue rounded border-slate-300 focus:ring-eprom-blue" />
+                                 <span className="ml-2 text-sm text-slate-700 font-medium">Open for Collaboration / Help Needed</span>
+                             </label>
                          </div>
-                         {isAnalyzingImage && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><span className="text-xs font-bold animate-pulse text-slate-900">AI Analyzing Image...</span></div>}
                     </div>
-                </div>
+                </Card>
 
-                {/* AI-Assisted Description */}
-                <div>
-                     <div className="flex justify-between items-end mb-1.5">
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Operational Detail</label>
-                        <div className="flex gap-2">
-                            <button type="button" onClick={handleVoiceInput} className={`text-[10px] uppercase font-bold px-3 py-1.5 rounded flex items-center gap-1 transition-colors ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" /></svg>
-                                {isRecording ? 'Recording...' : 'Dictate'}
-                            </button>
-                            <button type="button" onClick={handleEnhance} disabled={!description || isEnhancing} className="text-[10px] uppercase font-bold px-3 py-1.5 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 flex items-center gap-1 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>
-                                {isEnhancing ? 'Optimizing...' : 'AI Enhance'}
-                            </button>
-                        </div>
-                     </div>
-                     <textarea 
-                        value={description} 
-                        onChange={e => setDescription(e.target.value)} 
-                        className="w-full px-4 py-4 bg-white border border-slate-300 rounded text-slate-900 placeholder-slate-300 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 transition-all min-h-[150px] leading-relaxed"
-                        placeholder="Describe the current operational challenge and your proposed solution..."
-                     />
-                     {isTranscribing && <div className="text-xs text-slate-400 mt-1 animate-pulse">Transcribing audio stream...</div>}
-                </div>
-
-                {/* Dynamic Fields based on Template */}
-                {selectedTemplate && selectedTemplate.fields.length > 0 && (
-                    <div className="bg-slate-50 p-6 rounded border border-slate-200">
-                        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">Technical Specifications</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {selectedTemplate.fields.map(field => (
-                                <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
-                                        {field.label} {field.required && <span className="text-red-400">*</span>}
-                                    </label>
-                                    
-                                    {field.type === 'textarea' ? (
-                                        <textarea 
-                                            value={dynamicData[field.id] || ''}
-                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 transition-all"
-                                        />
-                                    ) : field.type === 'select' && field.options ? (
-                                        <select
-                                            value={dynamicData[field.id] || ''}
-                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 transition-all"
-                                        >
-                                            <option value="">Select...</option>
-                                            {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                        </select>
-                                    ) : field.type === 'checkbox' ? (
-                                        <div className="flex items-center h-10">
-                                            <input 
-                                                type="checkbox"
-                                                checked={!!dynamicData[field.id]}
-                                                onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.checked})}
-                                                className="w-5 h-5 text-blue-800 border-slate-300 rounded focus:ring-blue-800"
-                                            />
-                                            <span className="ml-3 text-sm text-slate-600">Yes / Enabled</span>
-                                        </div>
-                                    ) : (
-                                        <input 
-                                            type={field.type}
-                                            value={dynamicData[field.id] || ''}
-                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
-                                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 transition-all"
-                                        />
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <div className="pt-6 border-t border-slate-100 flex justify-end gap-4">
-                     <Button variant="ghost" onClick={() => navigate('/dashboard')} className="uppercase text-xs font-bold text-slate-400">Cancel</Button>
-                     <Button type="submit" variant="primary" className="px-8 shadow-xl bg-slate-900 text-white uppercase font-bold tracking-widest text-xs hover:bg-slate-800 transition-colors">Submit Protocol</Button>
+                <div className="flex justify-end pt-4">
+                    <Button type="submit" className="px-10 py-3 text-sm shadow-xl bg-slate-900 hover:bg-slate-800">Submit Protocol</Button>
                 </div>
             </form>
-        </Card>
-    </div>
-  );
-};
-
-// 4. Admin / Control Room (Updated with Logo Upload)
-const AdminPanel = () => {
-  const { settings, refreshSettings } = useAppContext();
-  const [users, setUsers] = useState<User[]>([]);
-  const [templates, setTemplates] = useState<FormTemplate[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
-  
-  // Settings State
-  const [newCat, setNewCat] = useState('');
-  const [newDept, setNewDept] = useState('');
-
-  // Form Builder State
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [newTemplateDesc, setNewTemplateDesc] = useState('');
-  const [newFields, setNewFields] = useState<FormField[]>([]);
-  const [editingField, setEditingField] = useState<Partial<FormField>>({});
-
-  // KPI Builder State
-  const DEFAULT_KPIS: RatingDimension[] = [
-    { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
-    { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation (resources, time).', weight: 20 },
-    { id: 'roi', name: 'Cost vs. Benefit', description: 'Estimated cost compared to expected benefits.', weight: 20 },
-    { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental improvement.', weight: 15 },
-    { id: 'risk', name: 'Risk Level', description: 'Operational, financial, or safety risks (High Score = Low Risk).', weight: 15 }
-  ];
-
-  const [currentKPIs, setCurrentKPIs] = useState<RatingDimension[]>(DEFAULT_KPIS);
-  const [newKPI, setNewKPI] = useState<Partial<RatingDimension>>({});
-
-  useEffect(() => {
-    refreshData();
-  }, []);
-
-  const refreshData = () => {
-      setUsers(db.getUsers());
-      setTemplates(db.getTemplates());
-  };
-
-  // User Management
-  const handleUserApproval = (uid: string, role: UserRole) => {
-    db.updateUserStatus(uid, UserStatus.ACTIVE, role);
-    refreshData();
-  };
-
-  const handleUserReject = (uid: string) => {
-    db.updateUserStatus(uid, UserStatus.REJECTED);
-    refreshData();
-  };
-
-  const handleRoleChange = (uid: string, newRole: UserRole) => {
-    db.updateUserRole(uid, newRole);
-    refreshData();
-  };
-
-  // Settings Management
-  const handleAddCategory = () => {
-    if (newCat) {
-      db.updateSettings({ ...settings, categories: [...settings.categories, newCat] });
-      refreshSettings();
-      setNewCat('');
-    }
-  };
-  const handleAddDept = () => {
-    if (newDept) {
-      db.updateSettings({ ...settings, departments: [...settings.departments, newDept] });
-      refreshSettings();
-      setNewDept('');
-    }
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-        try {
-            const base64 = await db.fileToBase64(e.target.files[0]);
-            const newSettings = { ...settings, logoUrl: base64 };
-            db.updateSettings(newSettings);
-            refreshSettings();
-        } catch (err) {
-            alert("Logo upload failed");
-        }
-    }
-  };
-
-  // Form Builder Logic
-  const addFieldToTemplate = () => {
-      if(!editingField.label || !editingField.type) return;
-      
-      const newField: FormField = {
-          id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
-          label: editingField.label,
-          type: editingField.type as any,
-          required: editingField.required || false,
-          options: editingField.options ? (editingField.options as any).split(',') : undefined
-      };
-      setNewFields([...newFields, newField]);
-      setEditingField({});
-  };
-
-  const addKPI = () => {
-    if (!newKPI.name || !newKPI.weight) return;
-    const k: RatingDimension = {
-        id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15),
-        name: newKPI.name,
-        description: newKPI.description || '',
-        weight: Number(newKPI.weight)
-    };
-    setCurrentKPIs([...currentKPIs, k]);
-    setNewKPI({});
-  };
-
-  const removeKPI = (id: string) => {
-      setCurrentKPIs(currentKPIs.filter(k => k.id !== id));
-  };
-  
-  const resetKPIs = () => setCurrentKPIs(DEFAULT_KPIS);
-  const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
-
-  const saveTemplate = () => {
-      if(!newTemplateName || newFields.length === 0) return;
-      
-      const t: FormTemplate = {
-          id: Date.now().toString(),
-          name: newTemplateName,
-          description: newTemplateDesc,
-          fields: newFields,
-          ratingConfig: currentKPIs, // Use the custom KPIs
-          isActive: true
-      };
-      db.saveTemplate(t);
-      setNewTemplateName('');
-      setNewTemplateDesc('');
-      setNewFields([]);
-      setCurrentKPIs(DEFAULT_KPIS); // Reset to defaults for next
-      refreshData();
-  };
-  
-  const deleteTemplate = (id: string) => {
-      db.deleteTemplate(id);
-      refreshData();
-  }
-
-  // Helper for pending user row
-  const PendingUserRow = ({ u }: { u: User }) => {
-      const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
-      return (
-        <tr className="hover:bg-amber-50 transition-colors bg-amber-50 border-l-4 border-amber-400">
-            <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
-            <td className="px-6 py-4 text-slate-600">{u.email}</td>
-            <td className="px-6 py-4 text-slate-600">{u.department}</td>
-            <td className="px-6 py-4">
-                <select 
-                    value={selectedRole} 
-                    onChange={e => setSelectedRole(e.target.value as UserRole)}
-                    className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"
-                >
-                    <option value={UserRole.EMPLOYEE}>Employee</option>
-                    <option value={UserRole.MANAGER}>Manager</option>
-                    <option value={UserRole.ADMIN}>Admin</option>
-                </select>
-            </td>
-            <td className="px-6 py-4">
-                <div className="flex space-x-2">
-                    <Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button>
-                    <Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button>
-                </div>
-            </td>
-        </tr>
-      );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Control Room</h1>
-        <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-            <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Admin Privileges Active</span>
-        </div>
-      </div>
-      
-      <div className="flex space-x-8 mb-10 border-b border-slate-200">
-        <button onClick={() => setActiveTab('users')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'users' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
-            Personnel
-            {activeTab === 'users' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
-        </button>
-        <button onClick={() => setActiveTab('forms')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'forms' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
-            Protocol Builder
-            {activeTab === 'forms' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
-        </button>
-        <button onClick={() => setActiveTab('settings')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'settings' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
-            System Config
-            {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
-        </button>
-      </div>
-
-      {activeTab === 'users' && (
-        <Card className="overflow-hidden border-none shadow-lg">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">Username</th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4">Role</th>
-                  <th className="px-6 py-4">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {users.filter(u => u.status === UserStatus.PENDING).map(u => (
-                    <PendingUserRow key={u.id} u={u} />
-                ))}
-                {users.filter(u => u.status === UserStatus.ACTIVE).map(u => (
-                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
-                    <td className="px-6 py-4">{u.email}</td>
-                    <td className="px-6 py-4">{u.department}</td>
-                    <td className="px-6 py-4">
-                        <select 
-                            value={u.role} 
-                            onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
-                            className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"
-                        >
-                             <option value={UserRole.EMPLOYEE}>Employee</option>
-                             <option value={UserRole.MANAGER}>Manager</option>
-                             <option value={UserRole.ADMIN}>Admin</option>
-                             <option value={UserRole.GUEST}>Guest</option>
-                        </select>
-                    </td>
-                    <td className="px-6 py-4">
-                        <div className="flex items-center">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
-                            <span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span>
-                        </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {activeTab === 'forms' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* List of Templates */}
-              <div className="lg:col-span-1 space-y-4">
-                  <h3 className="text-lg font-bold text-slate-900 mb-4 uppercase tracking-wide">Active Protocols</h3>
-                  {templates.map(t => (
-                      <Card key={t.id} className="p-5 border-l-4 border-l-slate-900 transition-all bg-white hover:shadow-lg cursor-pointer">
-                          <div className="flex justify-between items-start">
-                              <div>
-                                  <div className="font-bold text-slate-900 text-sm">{t.name}</div>
-                                  <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{t.fields.length} Data Points</div>
-                                  <div className="text-[10px] text-slate-900 mt-2 font-bold uppercase">
-                                      {t.ratingConfig ? `${t.ratingConfig.length} Evaluators` : 'Default KPIs'}
-                                  </div>
-                              </div>
-                              <button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button>
-                          </div>
-                      </Card>
-                  ))}
-              </div>
-
-              {/* Builder */}
-              <Card className="lg:col-span-2 p-8 border-none shadow-lg">
-                  <h3 className="text-lg font-bold text-slate-900 mb-8 uppercase tracking-wide flex items-center">
-                      <span className="w-2 h-2 bg-slate-900 rounded-full mr-3"></span>
-                      New Protocol Configuration
-                  </h3>
-                  {/* ... (Builder Fields code remains similar but refined) ... */}
-                  <div className="mb-8 grid grid-cols-2 gap-6">
-                      <Input label="Protocol Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" />
-                      <Input label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Short operational summary..." />
-                  </div>
-
-                  {/* Field Builder */}
-                  <div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8">
-                      <h4 className="text-xs font-bold text-slate-900 mb-6 uppercase tracking-widest border-b border-slate-200 pb-2">01 // Data Structure</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                          <Input label="Field Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} placeholder="Label" />
-                          <div className="mb-5">
-                              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Data Type</label>
-                              <select 
-                                value={editingField.type || ''} 
-                                onChange={e => setEditingField({...editingField, type: e.target.value as any})}
-                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 appearance-none input-base"
-                              >
-                                  <option value="">Select Type</option>
-                                  <option value="text">Short Text</option>
-                                  <option value="textarea">Long Text</option>
-                                  <option value="number">Numeric</option>
-                                  <option value="select">Selector</option>
-                                  <option value="checkbox">Boolean</option>
-                                  <option value="date">Date</option>
-                              </select>
-                          </div>
-                          {editingField.type === 'select' && (
-                             <Input label="Options (CSV)" value={editingField.options as any || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} placeholder="A, B, C" />
-                          )}
-                          <div className="mb-5 flex items-center h-10 bg-white px-3 rounded border border-slate-300">
-                              <input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-3 text-slate-900 bg-slate-100 border-slate-300 rounded" />
-                              <span className="text-xs text-slate-500 uppercase font-bold">Required</span>
-                          </div>
-                      </div>
-                      <Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>
-                      
-                      {newFields.length > 0 && (
-                        <div className="mt-6 space-y-2">
-                            {newFields.map((f, idx) => (
-                                <div key={idx} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
-                                    <span><span className="font-bold text-slate-900 uppercase">{f.label}</span> <span className="text-slate-500 ml-2">[{f.type}]</span></span>
-                                    <span className="text-[10px] text-slate-400 uppercase font-bold">{f.required ? 'REQ' : 'OPT'}</span>
-                                </div>
-                            ))}
-                        </div>
-                      )}
-                  </div>
-
-                  {/* KPI Builder */}
-                  <div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8">
-                      <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-2">
-                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">02 // Evaluation Metrics</h4>
-                        <div className={`text-xs font-bold uppercase tracking-wide ${totalWeight === 100 ? 'text-emerald-600' : 'text-red-500'}`}>Total Weight: {totalWeight}%</div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end mb-6">
-                           <Input label="Metric Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} placeholder="e.g. ROI" />
-                           <Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} placeholder="Context" />
-                           <Input label="Weight (%)" type="number" value={newKPI.weight || ''} onChange={e => setNewKPI({...newKPI, weight: Number(e.target.value)})} placeholder="20" />
-                           <Button onClick={addKPI} className="mb-5 bg-white hover:bg-slate-100 border-slate-300 text-slate-600">Add Metric</Button>
-                      </div>
-
-                      <div className="space-y-2">
-                          {currentKPIs.map(kpi => (
-                              <div key={kpi.id} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
-                                  <div className="flex-1">
-                                      <span className="font-bold text-slate-800 mr-3 uppercase">{kpi.name}</span>
-                                      <span className="text-slate-500">{kpi.description}</span>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                      <Badge color="blue">{kpi.weight}%</Badge>
-                                      <button onClick={() => removeKPI(kpi.id)} className="text-red-500 hover:text-red-700 transition-colors uppercase font-bold text-[10px]">Remove</button>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                      
-                      <div className="mt-6 text-right">
-                          <button onClick={resetKPIs} className="text-[10px] text-slate-900 hover:text-slate-600 uppercase font-bold tracking-wider">Reset Defaults</button>
-                      </div>
-                  </div>
-                  
-                  <div className="flex justify-end pt-6 border-t border-slate-200">
-                      <Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>Deploy Protocol</Button>
-                  </div>
-              </Card>
-          </div>
-      )}
-
-      {activeTab === 'settings' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-           <Card className="p-8 border-none shadow-lg">
-              <h3 className="font-bold text-lg mb-6 text-slate-900 uppercase tracking-wide">System Definitions</h3>
-              
-              {/* Branding Section */}
-              <div className="mb-8 p-6 bg-slate-50 rounded border border-slate-200">
-                 <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Brand Identity (Logo)</label>
-                 <div className="flex items-center gap-4">
-                    {settings.logoUrl && (
-                        <div className="w-16 h-16 bg-white border border-slate-200 rounded flex items-center justify-center p-2">
-                            <img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
-                        </div>
-                    )}
-                    <input type="file" onChange={handleLogoUpload} accept="image/*" className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-bold file:uppercase file:bg-slate-900 file:text-white hover:file:bg-slate-800 transition-colors"/>
-                 </div>
-              </div>
-
-              <div className="mb-8">
-                <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Operational Categories</label>
-                <div className="flex gap-3 mb-4">
-                  <Input placeholder="New Category" value={newCat} onChange={e => setNewCat(e.target.value)} className="mb-0 flex-1" />
-                  <Button onClick={handleAddCategory} className="whitespace-nowrap px-6">Add</Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {settings.categories.map(c => <Badge key={c} color="gray">{c}</Badge>)}
-                </div>
-              </div>
-              <div className="pt-6 border-t border-slate-200">
-                <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Organization Units</label>
-                 <div className="flex gap-3 mb-4">
-                  <Input placeholder="New Department" value={newDept} onChange={e => setNewDept(e.target.value)} className="mb-0 flex-1" />
-                  <Button onClick={handleAddDept} className="whitespace-nowrap px-6">Add</Button>
-                </div>
-                 <div className="flex flex-wrap gap-2">
-                  {settings.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}
-                </div>
-              </div>
-           </Card>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 5. Shared External View (Read Only)
-const SharedIdeaPage = () => {
-    const { id } = useParams();
-    const [idea, setIdea] = useState<Idea | null>(null);
-    const { user } = useAppContext();
-
-    useEffect(() => {
-        const all = db.getIdeas();
-        const found = all.find(i => i.id === id);
-        setIdea(found || null);
-    }, [id]);
-
-    if (!idea) return <div className="p-20 text-center text-slate-500 uppercase tracking-widest text-sm">Innovation record not found.</div>;
-
-    const canView = user && (user.status === UserStatus.ACTIVE);
-
-    if (!canView) return (
-        <div className="flex items-center justify-center min-h-screen pt-16">
-            <Card className="p-10 text-center max-w-md bg-white border-red-100 shadow-xl">
-                <h2 className="text-xl font-bold text-slate-900 mb-2 uppercase tracking-wide">Restricted Access</h2>
-                <p className="text-slate-500 mb-8 text-sm">Security Clearance Required.</p>
-                <Link to="/auth"><Button>Authenticate</Button></Link>
-            </Card>
         </div>
     );
+};
+
+// 5. Admin Panel
+const AdminPanel = () => {
+    const [users, setUsers] = useState<User[]>([]);
+    const [settings, setSettings] = useState<AppSettings>(db.getSettings());
+
+    useEffect(() => {
+        setUsers(db.getUsers());
+    }, []);
+
+    const handleApprove = (userId: string) => {
+        db.updateUserStatus(userId, UserStatus.ACTIVE);
+        setUsers(db.getUsers());
+    };
+
+    const handleReject = (userId: string) => {
+        db.updateUserStatus(userId, UserStatus.REJECTED);
+        setUsers(db.getUsers());
+    };
+
+    const handleRoleChange = (userId: string, role: UserRole) => {
+        db.updateUserRole(userId, role);
+        setUsers(db.getUsers());
+    };
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-24 fade-in">
-            {/* Header with Background if available */}
-            <div className={`mb-8 relative overflow-hidden rounded-xl shadow-2xl ${idea.coverImage ? 'p-10 text-white' : 'p-10 bg-white border border-slate-200'}`}>
-                {idea.coverImage && (
-                    <>
-                     <div className="absolute inset-0 z-0 bg-slate-950">
-                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-30 mix-blend-overlay" />
-                     </div>
-                     <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-transparent" />
-                    </>
-                )}
-                
-                <div className="relative z-10">
-                    <Badge color="blue" className="bg-blue-500/80 text-white border-none backdrop-blur-sm shadow-sm">SHARED RECORD</Badge>
-                    <h1 className={`text-4xl font-bold mt-4 tracking-tight leading-tight ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-900'}`}>{idea.title}</h1>
-                    <div className={`flex items-center gap-4 mt-4 text-xs uppercase tracking-widest font-bold ${idea.coverImage ? 'text-slate-300 drop-shadow-md' : 'text-slate-500'}`}>
-                        <span>{idea.authorName}</span>
-                        <div className="w-1 h-1 bg-current rounded-full"></div>
-                        <span>{new Date(idea.createdAt).toLocaleDateString()}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <Card className="p-10 mb-8 bg-slate-50 border-slate-200 shadow-sm">
-                <h3 className="text-xs font-bold text-slate-900 mb-6 uppercase tracking-widest border-b border-slate-200 pb-2">Executive Summary</h3>
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap font-medium text-lg">{idea.description}</p>
-            </Card>
+        <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
+             <div className="mb-8 border-b border-slate-200 pb-4">
+                <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                    <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></span>
+                    Control Room
+                </h1>
+                <p className="text-slate-500 mt-1">System Administration & User Access Control</p>
+             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {Object.entries(idea.dynamicData).map(([key, value]) => (
-                     <Card key={key} className="p-6 bg-white border-slate-200 shadow-sm">
-                         <div className="text-[10px] uppercase text-slate-400 font-bold mb-2 tracking-widest">{key.replace(/_/g, ' ')}</div>
-                         <div className="text-slate-900 font-bold">{String(value)}</div>
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                 {/* User Management */}
+                 <div className="lg:col-span-2 space-y-6">
+                     <Card className="p-6 border-none shadow-lg">
+                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">User Registry</h3>
+                         <div className="overflow-x-auto">
+                             <table className="w-full text-left border-collapse">
+                                 <thead>
+                                     <tr className="text-[10px] uppercase text-slate-400 border-b border-slate-100">
+                                         <th className="pb-3 pl-2">User</th>
+                                         <th className="pb-3">Role</th>
+                                         <th className="pb-3">Status</th>
+                                         <th className="pb-3 text-right">Actions</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody className="text-sm">
+                                     {users.map(u => (
+                                         <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                             <td className="py-4 pl-2 font-medium">
+                                                 <div className="text-slate-900">{u.username}</div>
+                                                 <div className="text-xs text-slate-400">{u.email}</div>
+                                             </td>
+                                             <td className="py-4">
+                                                 <select 
+                                                    value={u.role} 
+                                                    onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
+                                                    className="bg-transparent border-none text-xs font-bold uppercase focus:ring-0 cursor-pointer"
+                                                 >
+                                                     {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
+                                                 </select>
+                                             </td>
+                                             <td className="py-4">
+                                                 <Badge color={u.status === UserStatus.ACTIVE ? 'green' : u.status === UserStatus.PENDING ? 'yellow' : 'red'}>{u.status}</Badge>
+                                             </td>
+                                             <td className="py-4 text-right space-x-2">
+                                                 {u.status === UserStatus.PENDING && (
+                                                     <>
+                                                        <button onClick={() => handleApprove(u.id)} className="text-[10px] uppercase font-bold text-green-600 hover:text-green-800">Approve</button>
+                                                        <button onClick={() => handleReject(u.id)} className="text-[10px] uppercase font-bold text-red-600 hover:text-red-800">Reject</button>
+                                                     </>
+                                                 )}
+                                             </td>
+                                         </tr>
+                                     ))}
+                                 </tbody>
+                             </table>
+                         </div>
                      </Card>
-                 ))}
-            </div>
+                 </div>
+
+                 {/* System Stats / Quick Config */}
+                 <div className="space-y-6">
+                     <Card className="p-6 border-none shadow-lg bg-slate-900 text-white">
+                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">System Status</h3>
+                         <div className="space-y-4">
+                             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                 <span className="text-xs text-slate-400">Total Users</span>
+                                 <span className="font-bold font-mono">{users.length}</span>
+                             </div>
+                             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                 <span className="text-xs text-slate-400">Pending Approvals</span>
+                                 <span className="font-bold font-mono text-yellow-400">{users.filter(u => u.status === UserStatus.PENDING).length}</span>
+                             </div>
+                             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                                 <span className="text-xs text-slate-400">Version</span>
+                                 <span className="font-bold font-mono">v2.4.0</span>
+                             </div>
+                         </div>
+                     </Card>
+                 </div>
+             </div>
         </div>
     );
 };
@@ -1474,9 +1066,9 @@ const CollaborationHub = () => {
                         {idea.coverImage && (
                             <>
                                 <div className="absolute inset-0 z-0 bg-slate-950">
-                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 hover:scale-105 opacity-30" />
+                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 hover:scale-105 opacity-50" />
                                 </div>
-                                <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-900/60" />
+                                <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-black/40" />
                             </>
                         )}
 
@@ -1631,7 +1223,9 @@ const Dashboard = () => {
   };
 
   const copyShareLink = (id: string) => {
-      const url = `${window.location.origin}/#/view/${id}`;
+      // Use pathname to ensure we include the repo name (e.g., /IDB-EPROM/) for GitHub Pages
+      const baseUrl = window.location.href.split('#')[0];
+      const url = `${baseUrl}#/view/${id}`;
       navigator.clipboard.writeText(url);
       alert("Shareable link copied to clipboard!");
   };
@@ -1672,24 +1266,24 @@ const Dashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-      {/* Published Slider Section */}
+      {/* Published Grid Section */}
       <div className="mb-16">
           <h2 className="text-sm font-bold text-slate-500 mb-6 flex items-center uppercase tracking-widest border-b border-slate-200 pb-2">
               <span className="w-1.5 h-1.5 rounded-full bg-slate-900 mr-3 animate-pulse"></span> 
               Live Intelligence Stream
           </h2>
-          <div className="flex overflow-x-auto gap-6 pb-6 snap-x py-2 no-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
               {published.length === 0 ? (
-                  <div className="w-full p-8 text-slate-400 bg-slate-50 rounded border border-slate-200 text-xs uppercase tracking-wider text-center">No active intelligence streams.</div>
+                  <div className="w-full p-8 text-slate-400 bg-slate-50 rounded border border-slate-200 text-xs uppercase tracking-wider text-center col-span-full">No active intelligence streams.</div>
               ) : (
                   published.map(p => (
-                      <div key={p.id} className="min-w-[320px] max-w-[320px] bg-slate-900 rounded-lg snap-start border border-slate-800 shadow-xl relative overflow-hidden group hover:border-eprom-accent transition-all h-[400px]">
+                      <div key={p.id} className="w-full bg-slate-900 rounded-lg border border-slate-800 shadow-xl relative overflow-hidden group hover:border-eprom-accent transition-all h-[400px]">
                           {p.coverImage && (
                               <div className="absolute inset-0 z-0 bg-slate-950">
-                                  <img src={p.coverImage} className="w-full h-full object-cover opacity-30 transition-transform duration-700 group-hover:scale-110" />
+                                  <img src={p.coverImage} className="w-full h-full object-cover opacity-60 transition-transform duration-700 group-hover:scale-110" />
                               </div>
                           )}
-                          <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent" />
+                          <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
                           
                           <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                               <button onClick={() => copyShareLink(p.id)} className="text-[10px] bg-white text-slate-900 font-bold uppercase px-3 py-1 rounded shadow-lg">Share</button>
@@ -1736,9 +1330,9 @@ const Dashboard = () => {
             {idea.coverImage && (
                 <>
                     <div className="absolute inset-0 z-0 bg-slate-950">
-                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-30" />
+                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-50" />
                     </div>
-                    <div className="absolute inset-0 z-0 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-900/50" />
+                    <div className="absolute inset-0 z-0 bg-gradient-to-r from-black via-black/90 to-black/40" />
                 </>
             )}
 
