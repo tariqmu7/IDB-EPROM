@@ -612,897 +612,368 @@ const LandingPage = () => {
 const AuthPage = () => {
   const { login, user } = useAppContext();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({ username: '', password: '', email: '', department: 'Engineering' });
   const [error, setError] = useState('');
-  const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
     if (user) navigate('/dashboard');
-  }, [user, navigate]);
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
-        if (isRegistering) {
-            db.registerUser({ username, password, email: `${username}@eprom.com`, department: 'General', role: UserRole.EMPLOYEE });
-            alert("Registration successful. Please wait for admin approval.");
-            setIsRegistering(false);
-        } else {
-            await login(username, password);
-            navigate('/dashboard');
-        }
+      if (isLogin) {
+        await login(formData.username, formData.password);
+        navigate('/dashboard');
+      } else {
+        db.registerUser({
+            username: formData.username,
+            password: formData.password,
+            email: formData.email,
+            department: formData.department,
+            role: UserRole.EMPLOYEE
+        });
+        alert("Registration successful. Please wait for admin approval.");
+        setIsLogin(true);
+      }
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  const handleGuestLogin = async () => {
-      try {
-          await login('guest', 'guest');
-          navigate('/dashboard');
-      } catch (err: any) {
-          setError("Guest login failed. Please contact admin.");
-      }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <Card className="w-full max-w-md p-8 border-none shadow-2xl">
-        <div className="text-center mb-8">
-           <h1 className="text-2xl font-bold text-slate-900 mb-2">EPROM <span className="text-slate-400">ACCESS</span></h1>
-           <p className="text-slate-500 text-xs uppercase tracking-widest">Secure Gateway</p>
-        </div>
-        
-        {error && <div className="mb-6 bg-red-50 text-red-600 p-3 rounded text-sm text-center border border-red-100">{error}</div>}
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input 
-            label="Username" 
-            value={username} 
-            onChange={e => setUsername(e.target.value)} 
-            placeholder="Enter identity..." 
-            required 
-          />
-          <Input 
-            label="Password" 
-            type="password" 
-            value={password} 
-            onChange={e => setPassword(e.target.value)} 
-            placeholder="Enter credentials..." 
-            required 
-          />
-          <Button type="submit" className="w-full shadow-lg mt-4">{isRegistering ? 'Submit Application' : 'Authenticate'}</Button>
+      <Card className="w-full max-w-md p-8">
+        <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? 'Login' : 'Register'}</h2>
+        {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
+        <form onSubmit={handleSubmit}>
+          <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />
+          <Input label="Password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
+          {!isLogin && (
+            <>
+               <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+               <Select label="Department" options={db.getSettings().departments} value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required />
+            </>
+          )}
+          <Button type="submit" className="w-full mt-4">{isLogin ? 'Sign In' : 'Create Account'}</Button>
         </form>
-        
-        <div className="mt-4 text-center">
-            <button onClick={handleGuestLogin} className="text-xs uppercase font-bold text-slate-400 hover:text-slate-600 tracking-widest">
-                Continue as Guest
-            </button>
-        </div>
-
-        <div className="mt-6 text-center">
-            <button onClick={() => setIsRegistering(!isRegistering)} className="text-xs text-slate-400 hover:text-slate-900 underline underline-offset-4">
-                {isRegistering ? 'Back to Login' : 'Request Access / Register'}
-            </button>
-        </div>
+        <p className="mt-4 text-center text-sm text-slate-500 cursor-pointer hover:text-eprom-blue" onClick={() => setIsLogin(!isLogin)}>
+          {isLogin ? "Need an account? Register" : "Already have an account? Login"}
+        </p>
       </Card>
     </div>
   );
 };
 
-// 3. Shared View Page
+// 3. Shared Idea Page
 const SharedIdeaPage = () => {
   const { id } = useParams();
   const [idea, setIdea] = useState<Idea | null>(null);
 
   useEffect(() => {
-    const all = db.getIdeas();
-    const found = all.find(i => i.id === id);
-    setIdea(found || null);
+    if (id) {
+      const found = db.getIdeas().find(i => i.id === id);
+      setIdea(found || null);
+    }
   }, [id]);
 
-  if (!idea) return <div className="min-h-screen flex items-center justify-center text-slate-400 uppercase tracking-widest">Record not found or access denied.</div>;
+  if (!idea) return <div className="text-center py-20">Idea not found.</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-24 px-4">
-        <div className="max-w-4xl mx-auto">
-             <Card className="overflow-hidden shadow-2xl border-none">
-                 {idea.coverImage && (
-                     <div className="h-64 relative">
-                         <img src={idea.coverImage} className="w-full h-full object-cover" />
-                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-8">
-                             <h1 className="text-4xl font-bold text-white drop-shadow-lg">{idea.title}</h1>
-                         </div>
-                     </div>
-                 )}
-                 <div className="p-8 md:p-12 bg-white">
-                     {!idea.coverImage && <h1 className="text-3xl font-bold text-slate-900 mb-6">{idea.title}</h1>}
-                     
-                     <div className="flex gap-4 mb-8">
-                         <Badge color="blue">{idea.category}</Badge>
-                         <Badge color="gray">{idea.status}</Badge>
-                         <span className="text-xs text-slate-500 uppercase font-bold tracking-wider self-center">By {idea.authorName}</span>
-                     </div>
-
-                     <div className="prose prose-slate max-w-none mb-12">
-                         <p className="text-lg text-slate-600 leading-relaxed font-medium">{idea.description}</p>
-                     </div>
-
-                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6 p-6 bg-slate-50 rounded border border-slate-100 mb-8">
-                        <div>
-                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Impact/Benefit</span>
-                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.benefits || 'N/A'}</span>
-                        </div>
-                        <div>
-                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Cost Est.</span>
-                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.cost || 'N/A'}</span>
-                        </div>
-                        <div>
-                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Timeline</span>
-                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.timeline || 'N/A'}</span>
-                        </div>
-                         <div>
-                            <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Feasibility</span>
-                            <span className="text-sm font-bold text-slate-700">{idea.dynamicData?.feasibility || 'N/A'}</span>
-                        </div>
-                     </div>
-                     
-                     <div className="text-center pt-8 border-t border-slate-100">
-                         <p className="text-slate-400 text-xs uppercase tracking-widest mb-4">EPROM Innovation Registry</p>
-                         <Link to="/">
-                            <Button variant="secondary" className="text-xs uppercase">Return to Hub</Button>
-                         </Link>
-                     </div>
-                 </div>
-             </Card>
-        </div>
+    <div className="max-w-4xl mx-auto px-4 py-20">
+       <Card className="p-8">
+          <Badge color="blue" className="mb-4">{idea.category}</Badge>
+          <h1 className="text-3xl font-bold mb-4">{idea.title}</h1>
+          <div className="flex items-center gap-4 text-sm text-slate-500 mb-8">
+            <span>By {idea.authorName}</span>
+            <span>{new Date(idea.createdAt).toLocaleDateString()}</span>
+          </div>
+          {idea.coverImage && <img src={idea.coverImage} className="w-full h-64 object-cover rounded-lg mb-8" />}
+          <p className="whitespace-pre-wrap text-lg leading-relaxed text-slate-700">{idea.description}</p>
+          
+          <div className="mt-8 grid grid-cols-2 gap-4 bg-slate-50 p-6 rounded-lg">
+             {Object.entries(idea.dynamicData).map(([key, val]) => (
+                <div key={key}>
+                   <span className="block text-xs font-bold uppercase text-slate-400">{key}</span>
+                   <span className="font-medium">{val.toString()}</span>
+                </div>
+             ))}
+          </div>
+       </Card>
     </div>
   );
 };
 
-// 4. Submission / Edit Form (Dynamic)
+// 4. Collaboration Hub
+const CollaborationHub = () => {
+    const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
+    
+    useEffect(() => {
+        const all = db.getIdeas();
+        // Filter ideas that are marked for collaboration
+        setCollabIdeas(all.filter(i => 
+             (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) && 
+             (i.dynamicData['collab'] === true || (i as any).collaborationNeeded === true)
+        ));
+    }, []);
+
+    return (
+        <div className="max-w-7xl mx-auto px-4 py-20">
+            <h1 className="text-3xl font-bold mb-2">Collaboration Hub</h1>
+            <p className="text-slate-500 mb-8">Join forces on these active initiatives.</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {collabIdeas.map(idea => (
+                    <Card key={idea.id} className="p-6">
+                        <Badge color="blue" className="mb-2">{idea.category}</Badge>
+                        <h3 className="font-bold text-lg mb-2">{idea.title}</h3>
+                        <p className="text-sm text-slate-500 mb-4 line-clamp-3">{idea.description}</p>
+                        <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+                            <span className="text-xs font-bold text-slate-400">{idea.authorName}</span>
+                            <Button variant="secondary" className="text-xs py-1 px-3">Contact Lead</Button>
+                        </div>
+                    </Card>
+                ))}
+            </div>
+            {collabIdeas.length === 0 && <div className="text-center py-20 text-slate-400">No active collaboration requests.</div>}
+        </div>
+    );
+};
+
+// 5. Idea Form Page
 const IdeaFormPage = () => {
+    const { user } = useAppContext();
     const navigate = useNavigate();
     const location = useLocation();
-    const { user } = useAppContext();
-    const { isRecording, startRecording, stopRecording } = useRecorder();
-    
-    // State initialization
-    const existingIdea = location.state?.idea as Idea | undefined;
-    const parentIdea = location.state?.parentIdea as Idea | undefined;
+    const editingIdea = location.state?.idea as Idea | undefined;
+
+    const [title, setTitle] = useState(editingIdea?.title || '');
+    const [description, setDescription] = useState(editingIdea?.description || '');
+    const [category, setCategory] = useState(editingIdea?.category || '');
+    const [templateId, setTemplateId] = useState(editingIdea?.templateId || 'default-1'); // Default to first available usually
+    const [dynamicData, setDynamicData] = useState<Record<string, any>>(editingIdea?.dynamicData || {});
+    const [coverImage, setCoverImage] = useState(editingIdea?.coverImage || '');
     
     const [templates, setTemplates] = useState<FormTemplate[]>([]);
-    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-
-    // Core Data
-    const [title, setTitle] = useState(existingIdea?.title || '');
-    const [category, setCategory] = useState(existingIdea?.category || 'Innovation');
-    const [description, setDescription] = useState(existingIdea?.description || '');
-    const [coverImage, setCoverImage] = useState<string | undefined>(existingIdea?.coverImage);
-    
-    // Dynamic Data
-    const [dynamicData, setDynamicData] = useState<Record<string, any>>({});
+    const { isRecording, startRecording, stopRecording } = useRecorder();
     const [isEnhancing, setIsEnhancing] = useState(false);
 
     useEffect(() => {
-        const t = db.getTemplates();
-        setTemplates(t);
-        
-        if (existingIdea) {
-            setSelectedTemplateId(existingIdea.templateId);
-            setDynamicData(existingIdea.dynamicData || {});
-        } else {
-             // Default to the first template available if new
-            if (t.length > 0) {
-                setSelectedTemplateId(t[0].id);
-            }
-        }
-    }, [existingIdea]);
+        setTemplates(db.getTemplates());
+    }, []);
 
-    // Find the active template object
-    const currentTemplate = templates.find(t => t.id === selectedTemplateId);
-
-    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const base64 = await db.fileToBase64(e.target.files[0]);
-            setCoverImage(base64);
-            
-            // Auto-analyze image to fill description if empty
-            if (!description) {
-                const analysis = await aiService.analyzeImage(base64.split(',')[1], e.target.files[0].type);
-                setDescription(prev => prev ? prev : analysis);
-            }
-        }
-    };
-
-    const handleVoiceInput = async () => {
-        if (isRecording) {
-            const audio = await stopRecording();
-            if (audio) {
-                const text = await aiService.transcribeAudio(audio.base64, audio.mimeType);
-                setDescription(prev => prev + " " + text);
-            }
-        } else {
-            await startRecording();
-        }
-    };
-
-    const handleEnhanceText = async () => {
-        if (!description) return;
+    const handleEnhance = async () => {
+        if(!description) return;
         setIsEnhancing(true);
         const enhanced = await aiService.enhanceIdeaText(description);
         setDescription(enhanced);
         setIsEnhancing(false);
-    };
+    }
 
-    const handleDynamicChange = (fieldId: string, value: any) => {
-        setDynamicData(prev => ({ ...prev, [fieldId]: value }));
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!user || !currentTemplate) return;
-
-        // Ensure status resets to SUBMITTED if an employee is saving changes to a rejected/revision item
-        let status = existingIdea?.status || IdeaStatus.SUBMITTED;
-        if (user.role === UserRole.EMPLOYEE) {
-            if (status === IdeaStatus.NEEDS_REVISION || status === IdeaStatus.REJECTED || status === IdeaStatus.DRAFT) {
-                status = IdeaStatus.SUBMITTED;
+    const handleAudioInput = async () => {
+        if(isRecording) {
+            const audioFile = await stopRecording();
+            if(audioFile) {
+                // Transcribe
+                const text = await aiService.transcribeAudio(audioFile.base64, audioFile.mimeType);
+                if(text) setDescription(prev => prev + " " + text);
             }
+        } else {
+            startRecording();
         }
+    }
 
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if(e.target.files?.[0]) {
+            const base64 = await db.fileToBase64(e.target.files[0]);
+            setCoverImage(base64);
+        }
+    }
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if(!user) return;
+
+        const template = templates.find(t => t.id === templateId);
+        
         const newIdea: Idea = {
-            id: existingIdea?.id || Date.now().toString(),
+            id: editingIdea?.id || Date.now().toString(),
             authorId: user.id,
             authorName: user.username,
             department: user.department,
-            createdAt: existingIdea?.createdAt || new Date().toISOString(),
+            createdAt: editingIdea?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             title,
             description,
             category,
             coverImage,
-            status: status,
-            templateId: currentTemplate.id,
-            templateName: currentTemplate.name,
-            parentIdeaId: parentIdea?.id,
-            dynamicData: dynamicData,
-            tags: [], 
-            ratings: existingIdea?.ratings || [],
-            comments: existingIdea?.comments || []
+            templateId,
+            templateName: template?.name || 'Unknown',
+            dynamicData,
+            tags: [],
+            status: editingIdea?.status || IdeaStatus.DRAFT,
+            ratings: editingIdea?.ratings || [],
+            comments: editingIdea?.comments || []
         };
 
         db.saveIdea(newIdea);
         navigate('/dashboard');
-    };
+    }
+
+    const currentTemplate = templates.find(t => t.id === templateId);
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-24 fade-in">
-            <div className="mb-8 border-b border-slate-200 pb-4 flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">{existingIdea ? 'Edit Protocol' : (parentIdea ? 'Collaborate on Protocol' : 'Initialize New Protocol')}</h1>
-                    {parentIdea && <p className="text-slate-500 mt-1">Contributing to: <span className="font-bold">{parentIdea.title}</span></p>}
-                </div>
-                <Button variant="ghost" onClick={() => navigate(-1)} className="text-xs uppercase">Cancel</Button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Protocol Type Selector */}
-                {!existingIdea && templates.length > 1 && (
-                     <div className="mb-6">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Protocol Type</label>
-                        <select 
-                            value={selectedTemplateId} 
-                            onChange={(e) => {
-                                setSelectedTemplateId(e.target.value);
-                                setDynamicData({}); // Clear data on template switch
-                            }}
-                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all appearance-none input-base"
-                        >
-                            {templates.map(t => (
-                                <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                        </select>
+        <div className="max-w-3xl mx-auto px-4 py-20">
+            <h1 className="text-3xl font-bold mb-8">{editingIdea ? 'Edit Innovation' : 'Submit New Innovation'}</h1>
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <Card className="p-6">
+                    <Input label="Title" value={title} onChange={e => setTitle(e.target.value)} required />
+                    
+                    <div className="relative">
+                        <Textarea label="Description" value={description} onChange={e => setDescription(e.target.value)} rows={6} required />
+                        <div className="absolute top-0 right-0 flex gap-2">
+                             <button type="button" onClick={handleEnhance} disabled={isEnhancing} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">
+                                {isEnhancing ? 'Enhancing...' : 'AI Enhance'}
+                             </button>
+                             <button type="button" onClick={handleAudioInput} className={`text-xs px-2 py-1 rounded ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-600'}`}>
+                                {isRecording ? 'Stop Recording' : 'Dictate'}
+                             </button>
+                        </div>
                     </div>
-                )}
 
-                {/* Core Info */}
-                <Card className="p-8 border-none shadow-lg">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Core Data</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Input label="Protocol Title" value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Predictive Valve Maintenance" />
-                        <Select label="Category" options={['Cost Reduction', 'Safety Improvement', 'Process Optimization', 'Innovation', 'Sustainability']} value={category} onChange={e => setCategory(e.target.value)} required />
-                    </div>
+                    <Select label="Category" options={db.getSettings().categories} value={category} onChange={e => setCategory(e.target.value)} required />
                     
                     <div className="mb-5">
-                        <div className="flex justify-between items-end mb-1.5">
-                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">Description / Hypothesis</label>
-                             <div className="flex gap-2">
-                                <button type="button" onClick={handleVoiceInput} className={`text-[10px] font-bold uppercase flex items-center gap-1 ${isRecording ? 'text-red-600 animate-pulse' : 'text-slate-400 hover:text-slate-900'}`}>
-                                    <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-600' : 'bg-slate-400'}`}></span>
-                                    {isRecording ? 'Stop Recording' : 'Voice Input'}
-                                </button>
-                                <button type="button" onClick={handleEnhanceText} disabled={isEnhancing} className="text-[10px] font-bold uppercase text-indigo-500 hover:text-indigo-700 disabled:opacity-50">
-                                    {isEnhancing ? 'Optimizing...' : 'AI Enhance'}
-                                </button>
-                             </div>
-                        </div>
-                        <textarea 
-                            className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 placeholder-slate-400 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all min-h-[120px]"
-                            value={description}
-                            onChange={e => setDescription(e.target.value)}
-                            required
-                        />
-                    </div>
-
-                    <div className="mb-5">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Supporting Imagery</label>
-                        <div className="flex items-center gap-4">
-                            <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded text-xs font-bold uppercase transition-colors">
-                                Upload Image
-                                <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                            </label>
-                            {coverImage && <span className="text-xs text-green-600 font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Image Attached</span>}
-                        </div>
-                        {coverImage && (
-                            <div className="mt-4 h-40 w-full md:w-1/2 overflow-hidden rounded border border-slate-200">
-                                <img src={coverImage} className="w-full h-full object-cover" />
-                            </div>
-                        )}
+                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Cover Image</label>
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"/>
+                        {coverImage && <img src={coverImage} className="mt-4 h-32 object-cover rounded" />}
                     </div>
                 </Card>
 
-                {/* Template Fields (Dynamic) */}
                 {currentTemplate && (
-                    <Card className="p-8 border-none shadow-lg">
-                        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Specific Data Points</h3>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {currentTemplate.fields.map((field) => {
-                                const commonProps = {
-                                    key: field.id,
-                                    label: field.label,
-                                    required: field.required,
-                                    value: dynamicData[field.id] || '',
-                                    onChange: (e: any) => handleDynamicChange(field.id, field.type === 'checkbox' ? e.target.checked : e.target.value)
-                                };
-
-                                // Render different inputs based on field type
-                                if (field.type === 'textarea') {
-                                    return (
-                                        <div key={field.id} className="col-span-1 md:col-span-2">
-                                            <Textarea {...commonProps} />
-                                        </div>
-                                    );
-                                } else if (field.type === 'select' && field.options) {
-                                    return <Select {...commonProps} options={field.options} />;
-                                } else if (field.type === 'checkbox') {
-                                    return (
-                                        <div key={field.id} className="flex items-center h-full pt-6">
-                                            <label className="flex items-center cursor-pointer">
-                                                <input 
-                                                    type="checkbox" 
-                                                    checked={!!dynamicData[field.id]} 
-                                                    onChange={(e) => handleDynamicChange(field.id, e.target.checked)} 
-                                                    className="form-checkbox h-5 w-5 text-eprom-blue rounded border-slate-300 focus:ring-eprom-blue" 
-                                                />
-                                                <span className="ml-2 text-sm text-slate-700 font-medium">{field.label}</span>
-                                            </label>
-                                        </div>
-                                    );
-                                } else {
-                                    // Default Text, Number, Date
-                                    return <Input {...commonProps} type={field.type} />;
-                                }
-                            })}
-                        </div>
+                    <Card className="p-6">
+                        <h3 className="font-bold text-lg mb-4 text-slate-700">Detailed Information</h3>
+                        {currentTemplate.fields.map(field => (
+                            <div key={field.id} className="mb-4">
+                                {field.type === 'textarea' ? (
+                                    <Textarea 
+                                        label={field.label} 
+                                        required={field.required}
+                                        value={dynamicData[field.id] || ''}
+                                        onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
+                                    />
+                                ) : field.type === 'select' ? (
+                                    <Select 
+                                        label={field.label}
+                                        options={field.options || []}
+                                        required={field.required}
+                                        value={dynamicData[field.id] || ''}
+                                        onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
+                                    />
+                                ) : field.type === 'checkbox' ? (
+                                    <div className="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox"
+                                            checked={!!dynamicData[field.id]}
+                                            onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.checked})}
+                                            className="w-4 h-4 text-eprom-blue rounded border-gray-300 focus:ring-eprom-blue"
+                                        />
+                                        <label className="text-sm font-medium text-slate-700">{field.label}</label>
+                                    </div>
+                                ) : (
+                                    <Input 
+                                        label={field.label}
+                                        type={field.type}
+                                        required={field.required}
+                                        value={dynamicData[field.id] || ''}
+                                        onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})}
+                                    />
+                                )}
+                            </div>
+                        ))}
                     </Card>
                 )}
-
-                <div className="flex justify-end pt-4">
-                    <Button type="submit" className="px-10 py-3 text-sm shadow-xl bg-slate-900 hover:bg-slate-800">
-                        {existingIdea && (existingIdea.status === IdeaStatus.NEEDS_REVISION || existingIdea.status === IdeaStatus.REJECTED) ? 'Resubmit Protocol' : 'Submit Protocol'}
-                    </Button>
+                
+                <div className="flex justify-end gap-4">
+                    <Button variant="secondary" onClick={() => navigate('/dashboard')}>Cancel</Button>
+                    <Button type="submit">Submit Proposal</Button>
                 </div>
             </form>
         </div>
     );
 };
 
-// 5. Admin / Control Room (Full Featured)
+// 6. Admin Panel
 const AdminPanel = () => {
-  // ... (No changes needed for Admin Panel in this request) ...
-  const { settings, refreshSettings } = useAppContext();
-  const [users, setUsers] = useState<User[]>([]);
-  const [templates, setTemplates] = useState<FormTemplate[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
-  
-  // Settings State
-  const [newCat, setNewCat] = useState('');
-  const [newDept, setNewDept] = useState('');
-
-  // Form Builder State
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [newTemplateName, setNewTemplateName] = useState('');
-  const [newTemplateDesc, setNewTemplateDesc] = useState('');
-  const [newFields, setNewFields] = useState<FormField[]>([]);
-  const [editingField, setEditingField] = useState<Partial<FormField>>({});
-
-  // KPI Builder State
-  const DEFAULT_KPIS: RatingDimension[] = [
-    { id: 'impact', name: 'Impact on Business Goals', description: 'Reduces cost, increases revenue, improves safety.', weight: 30 },
-    { id: 'feasibility', name: 'Feasibility', description: 'Ease of implementation (resources, time).', weight: 20 },
-    { id: 'roi', name: 'Cost vs. Benefit', description: 'Estimated cost compared to expected benefits.', weight: 20 },
-    { id: 'innovation', name: 'Innovation Level', description: 'New approach vs incremental improvement.', weight: 15 },
-    { id: 'risk', name: 'Risk Level', description: 'Operational, financial, or safety risks (High Score = Low Risk).', weight: 15 }
-  ];
-
-  const [currentKPIs, setCurrentKPIs] = useState<RatingDimension[]>(DEFAULT_KPIS);
-  const [newKPI, setNewKPI] = useState<Partial<RatingDimension>>({});
-
-  useEffect(() => {
-    refreshData();
-  }, []);
-
-  const refreshData = () => {
-      setUsers(db.getUsers());
-      setTemplates(db.getTemplates());
-  };
-
-  // User Management
-  const handleUserApproval = (uid: string, role: UserRole) => {
-    db.updateUserStatus(uid, UserStatus.ACTIVE, role);
-    refreshData();
-  };
-
-  const handleUserReject = (uid: string) => {
-    db.updateUserStatus(uid, UserStatus.REJECTED);
-    refreshData();
-  };
-
-  const handleRoleChange = (uid: string, newRole: UserRole) => {
-    db.updateUserRole(uid, newRole);
-    refreshData();
-  };
-
-  // Settings Management
-  const handleAddCategory = () => {
-    if (newCat) {
-      db.updateSettings({ ...settings, categories: [...settings.categories, newCat] });
-      refreshSettings();
-      setNewCat('');
-    }
-  };
-  const handleAddDept = () => {
-    if (newDept) {
-      db.updateSettings({ ...settings, departments: [...settings.departments, newDept] });
-      refreshSettings();
-      setNewDept('');
-    }
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-        try {
-            const base64 = await db.fileToBase64(e.target.files[0]);
-            const newSettings = { ...settings, logoUrl: base64 };
-            db.updateSettings(newSettings);
-            refreshSettings();
-        } catch (err) {
-            alert("Logo upload failed");
-        }
-    }
-  };
-
-  // Form Builder Logic
-  const addFieldToTemplate = () => {
-      if(!editingField.label || !editingField.type) return;
-      
-      const newField: FormField = {
-          id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(),
-          label: editingField.label,
-          type: editingField.type as any,
-          required: editingField.required || false,
-          options: editingField.options ? (editingField.options as any).split(',') : undefined
-      };
-      setNewFields([...newFields, newField]);
-      setEditingField({});
-  };
-
-  const addKPI = () => {
-    if (!newKPI.name || !newKPI.weight) return;
-    const k: RatingDimension = {
-        id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15),
-        name: newKPI.name,
-        description: newKPI.description || '',
-        weight: Number(newKPI.weight)
-    };
-    setCurrentKPIs([...currentKPIs, k]);
-    setNewKPI({});
-  };
-
-  const removeKPI = (id: string) => {
-      setCurrentKPIs(currentKPIs.filter(k => k.id !== id));
-  };
-  
-  const resetKPIs = () => setCurrentKPIs(DEFAULT_KPIS);
-  const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
-
-  const handleEditTemplate = (t: FormTemplate) => {
-      setEditingTemplateId(t.id);
-      setNewTemplateName(t.name);
-      setNewTemplateDesc(t.description);
-      setNewFields(t.fields);
-      setCurrentKPIs(t.ratingConfig || []);
-      // Scroll to builder
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleCancelEdit = () => {
-      setEditingTemplateId(null);
-      setNewTemplateName('');
-      setNewTemplateDesc('');
-      setNewFields([]);
-      setCurrentKPIs(DEFAULT_KPIS);
-  };
-
-  const saveTemplate = () => {
-      if(!newTemplateName || newFields.length === 0) return;
-      
-      const t: FormTemplate = {
-          id: editingTemplateId || Date.now().toString(),
-          name: newTemplateName,
-          description: newTemplateDesc,
-          fields: newFields,
-          ratingConfig: currentKPIs,
-          isActive: true
-      };
-      db.saveTemplate(t);
-      
-      // Reset
-      handleCancelEdit();
-      refreshData();
-  };
-  
-  const deleteTemplate = (id: string) => {
-      if (confirm("Are you sure you want to delete this protocol? Existing ideas may lose structural references.")) {
-        db.deleteTemplate(id);
-        refreshData();
-      }
-  }
-
-  // Helper for pending user row
-  const PendingUserRow = ({ u }: { u: User }) => {
-      const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
-      return (
-        <tr className="hover:bg-amber-50 transition-colors bg-amber-50 border-l-4 border-amber-400">
-            <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
-            <td className="px-6 py-4 text-slate-600">{u.email}</td>
-            <td className="px-6 py-4 text-slate-600">{u.department}</td>
-            <td className="px-6 py-4">
-                <select 
-                    value={selectedRole} 
-                    onChange={e => setSelectedRole(e.target.value as UserRole)}
-                    className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"
-                >
-                    <option value={UserRole.EMPLOYEE}>Employee</option>
-                    <option value={UserRole.MANAGER}>Manager</option>
-                    <option value={UserRole.ADMIN}>Admin</option>
-                </select>
-            </td>
-            <td className="px-6 py-4">
-                <div className="flex space-x-2">
-                    <Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button>
-                    <Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button>
-                </div>
-            </td>
-        </tr>
-      );
-  }
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Control Room</h1>
-        <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-            <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Admin Privileges Active</span>
-        </div>
-      </div>
-      
-      <div className="flex space-x-8 mb-10 border-b border-slate-200">
-        <button onClick={() => setActiveTab('users')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'users' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
-            Personnel
-            {activeTab === 'users' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
-        </button>
-        <button onClick={() => setActiveTab('forms')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'forms' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
-            Protocol Builder
-            {activeTab === 'forms' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
-        </button>
-        <button onClick={() => setActiveTab('settings')} className={`pb-4 px-1 font-bold text-sm uppercase tracking-wider transition-all relative ${activeTab === 'settings' ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
-            System Config
-            {activeTab === 'settings' && <span className="absolute bottom-0 left-0 w-full h-[3px] bg-slate-900"></span>}
-        </button>
-      </div>
-
-      {activeTab === 'users' && (
-        <Card className="overflow-hidden border-none shadow-lg">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm text-slate-600">
-              <thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider">
-                <tr>
-                  <th className="px-6 py-4">Username</th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Department</th>
-                  <th className="px-6 py-4">Role</th>
-                  <th className="px-6 py-4">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {users.filter(u => u.status === UserStatus.PENDING).map(u => (
-                    <PendingUserRow key={u.id} u={u} />
-                ))}
-                {users.filter(u => u.status === UserStatus.ACTIVE).map(u => (
-                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
-                    <td className="px-6 py-4">{u.email}</td>
-                    <td className="px-6 py-4">{u.department}</td>
-                    <td className="px-6 py-4">
-                        <select 
-                            value={u.role} 
-                            onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
-                            className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"
-                        >
-                             <option value={UserRole.EMPLOYEE}>Employee</option>
-                             <option value={UserRole.MANAGER}>Manager</option>
-                             <option value={UserRole.ADMIN}>Admin</option>
-                             <option value={UserRole.GUEST}>Guest</option>
-                        </select>
-                    </td>
-                    <td className="px-6 py-4">
-                        <div className="flex items-center">
-                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2"></div>
-                            <span className="text-xs uppercase text-emerald-600 font-bold tracking-wider">Active</span>
-                        </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {activeTab === 'forms' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* List of Templates */}
-              <div className="lg:col-span-1 space-y-4">
-                  <h3 className="text-lg font-bold text-slate-900 mb-4 uppercase tracking-wide">Active Protocols</h3>
-                  {templates.map(t => (
-                      <Card key={t.id} className={`p-5 border-l-4 transition-all hover:shadow-lg cursor-pointer ${editingTemplateId === t.id ? 'border-l-blue-500 bg-blue-50' : 'border-l-slate-900 bg-white'}`}>
-                          <div className="flex justify-between items-start">
-                              <div onClick={() => handleEditTemplate(t)} className="flex-1">
-                                  <div className="font-bold text-slate-900 text-sm">{t.name}</div>
-                                  <div className="text-xs text-slate-500 mt-1 uppercase tracking-wider">{t.fields.length} Data Points</div>
-                                  <div className="text-[10px] text-slate-900 mt-2 font-bold uppercase">
-                                      {t.ratingConfig ? `${t.ratingConfig.length} Evaluators` : 'Default KPIs'}
-                                  </div>
-                              </div>
-                              <div className="flex flex-col gap-1">
-                                <button className="text-blue-600 hover:text-blue-800 transition-colors text-xs uppercase font-bold" onClick={() => handleEditTemplate(t)}>Edit</button>
-                                <button className="text-red-500 hover:text-red-700 transition-colors text-xs uppercase font-bold" onClick={() => deleteTemplate(t.id)}>Delete</button>
-                              </div>
-                          </div>
-                      </Card>
-                  ))}
-              </div>
-
-              {/* Builder */}
-              <Card className="lg:col-span-2 p-8 border-none shadow-lg">
-                  <div className="flex justify-between items-center mb-8">
-                      <h3 className="text-lg font-bold text-slate-900 uppercase tracking-wide flex items-center">
-                          <span className={`w-2 h-2 rounded-full mr-3 ${editingTemplateId ? 'bg-blue-500' : 'bg-slate-900'}`}></span>
-                          {editingTemplateId ? 'Modify Existing Protocol' : 'New Protocol Configuration'}
-                      </h3>
-                      {editingTemplateId && (
-                          <button onClick={handleCancelEdit} className="text-xs text-slate-500 hover:text-slate-900 uppercase font-bold">Cancel Edit</button>
-                      )}
-                  </div>
-                  
-                  <div className="mb-8 grid grid-cols-2 gap-6">
-                      <Input label="Protocol Name" value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="e.g. Safety Incident Report" />
-                      <Input label="Description" value={newTemplateDesc} onChange={e => setNewTemplateDesc(e.target.value)} placeholder="Short operational summary..." />
-                  </div>
-
-                  {/* Field Builder */}
-                  <div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8">
-                      <h4 className="text-xs font-bold text-slate-900 mb-6 uppercase tracking-widest border-b border-slate-200 pb-2">01 // Data Structure</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                          <Input label="Field Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} placeholder="Label" />
-                          <div className="mb-5">
-                              <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Data Type</label>
-                              <select 
-                                value={editingField.type || ''} 
-                                onChange={e => setEditingField({...editingField, type: e.target.value as any})}
-                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 appearance-none input-base"
-                              >
-                                  <option value="">Select Type</option>
-                                  <option value="text">Short Text</option>
-                                  <option value="textarea">Long Text</option>
-                                  <option value="number">Numeric</option>
-                                  <option value="select">Selector</option>
-                                  <option value="checkbox">Boolean</option>
-                                  <option value="date">Date</option>
-                              </select>
-                          </div>
-                          {editingField.type === 'select' && (
-                             <Input label="Options (CSV)" value={editingField.options as any || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} placeholder="A, B, C" />
-                          )}
-                          <div className="mb-5 flex items-center h-10 bg-white px-3 rounded border border-slate-300">
-                              <input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-3 text-slate-900 bg-slate-100 border-slate-300 rounded" />
-                              <span className="text-xs text-slate-500 uppercase font-bold">Required</span>
-                          </div>
-                      </div>
-                      <Button onClick={addFieldToTemplate} className="w-full mt-2 border border-dashed border-slate-300 bg-white hover:bg-slate-50 text-slate-500">+ Append Data Field</Button>
-                      
-                      {newFields.length > 0 && (
-                        <div className="mt-6 space-y-2">
-                            {newFields.map((f, idx) => (
-                                <div key={idx} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
-                                    <span><span className="font-bold text-slate-900 uppercase">{f.label}</span> <span className="text-slate-500 ml-2">[{f.type}]</span></span>
-                                    <span className="text-[10px] text-slate-400 uppercase font-bold">{f.required ? 'REQ' : 'OPT'}</span>
-                                    {/* Ability to remove field during build? keeping it simple for now */}
-                                </div>
-                            ))}
-                        </div>
-                      )}
-                  </div>
-
-                  {/* KPI Builder */}
-                  <div className="bg-slate-50 p-6 rounded border border-slate-200 mb-8">
-                      <div className="flex justify-between items-center mb-6 border-b border-slate-200 pb-2">
-                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest">02 // Evaluation Metrics</h4>
-                        <div className={`text-xs font-bold uppercase tracking-wide ${totalWeight === 100 ? 'text-emerald-600' : 'text-red-500'}`}>Total Weight: {totalWeight}%</div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end mb-6">
-                           <Input label="Metric Name" value={newKPI.name || ''} onChange={e => setNewKPI({...newKPI, name: e.target.value})} placeholder="e.g. ROI" />
-                           <Input label="Description" value={newKPI.description || ''} onChange={e => setNewKPI({...newKPI, description: e.target.value})} placeholder="Context" />
-                           <Input label="Weight (%)" type="number" value={newKPI.weight || ''} onChange={e => setNewKPI({...newKPI, weight: Number(e.target.value)})} placeholder="20" />
-                           <Button onClick={addKPI} className="mb-5 bg-white hover:bg-slate-100 border-slate-300 text-slate-600">Add Metric</Button>
-                      </div>
-
-                      <div className="space-y-2">
-                          {currentKPIs.map(kpi => (
-                              <div key={kpi.id} className="bg-white p-3 rounded flex justify-between items-center text-xs border border-slate-200 shadow-sm">
-                                  <div className="flex-1">
-                                      <span className="font-bold text-slate-800 mr-3 uppercase">{kpi.name}</span>
-                                      <span className="text-slate-500">{kpi.description}</span>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                      <Badge color="blue">{kpi.weight}%</Badge>
-                                      <button onClick={() => removeKPI(kpi.id)} className="text-red-500 hover:text-red-700 transition-colors uppercase font-bold text-[10px]">Remove</button>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-                      
-                      <div className="mt-6 text-right">
-                          <button onClick={resetKPIs} className="text-[10px] text-slate-900 hover:text-slate-600 uppercase font-bold tracking-wider">Reset Defaults</button>
-                      </div>
-                  </div>
-                  
-                  <div className="flex justify-end pt-6 border-t border-slate-200">
-                      <Button onClick={saveTemplate} variant="primary" className="px-10 py-3 shadow-lg bg-slate-900 text-white" disabled={totalWeight !== 100}>
-                          {editingTemplateId ? 'Update Protocol' : 'Deploy Protocol'}
-                      </Button>
-                  </div>
-              </Card>
-          </div>
-      )}
-
-      {activeTab === 'settings' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-           <Card className="p-8 border-none shadow-lg">
-              <h3 className="font-bold text-lg mb-6 text-slate-900 uppercase tracking-wide">System Definitions</h3>
-              
-              {/* Branding Section */}
-              <div className="mb-8 p-6 bg-slate-50 rounded border border-slate-200">
-                 <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Brand Identity (Logo)</label>
-                 <div className="flex items-center gap-4">
-                    {settings.logoUrl && (
-                        <div className="w-16 h-16 bg-white border border-slate-200 rounded flex items-center justify-center p-2">
-                            <img src={settings.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
-                        </div>
-                    )}
-                    <input type="file" onChange={handleLogoUpload} accept="image/*" className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-xs file:font-bold file:uppercase file:bg-slate-900 file:text-white hover:file:bg-slate-800 transition-colors"/>
-                 </div>
-              </div>
-
-              <div className="mb-8">
-                <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Operational Categories</label>
-                <div className="flex gap-3 mb-4">
-                  <Input placeholder="New Category" value={newCat} onChange={e => setNewCat(e.target.value)} className="mb-0 flex-1" />
-                  <Button onClick={handleAddCategory} className="whitespace-nowrap px-6">Add</Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {settings.categories.map(c => <Badge key={c} color="gray">{c}</Badge>)}
-                </div>
-              </div>
-              <div className="pt-6 border-t border-slate-200">
-                <label className="block text-xs font-bold mb-3 text-slate-500 uppercase tracking-wide">Organization Units</label>
-                 <div className="flex gap-3 mb-4">
-                  <Input placeholder="New Department" value={newDept} onChange={e => setNewDept(e.target.value)} className="mb-0 flex-1" />
-                  <Button onClick={handleAddDept} className="whitespace-nowrap px-6">Add</Button>
-                </div>
-                 <div className="flex flex-wrap gap-2">
-                  {settings.departments.map(d => <Badge key={d} color="gray">{d}</Badge>)}
-                </div>
-              </div>
-           </Card>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// 6. Collaboration Hub
-const CollaborationHub = () => {
-  // ... (No changes needed for Collaboration Hub) ...
-    const { user } = useAppContext();
-    const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
-    const navigate = useNavigate();
+    const [users, setUsers] = useState<User[]>([]);
+    const [activeTab, setActiveTab] = useState<'users' | 'settings'>('users');
 
     useEffect(() => {
-        const all = db.getIdeas();
-        const filtered = all.filter(i => 
-            (i.status === IdeaStatus.PUBLISHED || i.status === IdeaStatus.APPROVED) &&
-            (i.dynamicData?.collab === true || (i as any).collaborationNeeded === true)
-        );
-        setCollabIdeas(filtered);
+        setUsers(db.getUsers());
     }, []);
 
-    const handleJoin = (idea: Idea) => {
-        navigate('/submit', { state: { parentIdea: idea } });
-    };
+    const handleUserAction = (userId: string, action: 'approve' | 'reject' | 'promote') => {
+        if(action === 'approve') db.updateUserStatus(userId, UserStatus.ACTIVE);
+        if(action === 'reject') db.updateUserStatus(userId, UserStatus.REJECTED);
+        if(action === 'promote') db.updateUserRole(userId, UserRole.MANAGER);
+        setUsers(db.getUsers());
+    }
 
     return (
-        <div className="max-w-7xl mx-auto px-4 py-24 fade-in">
-            <div className="mb-10 border-b border-slate-200 pb-4">
-                <h1 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Collaboration Hub</h1>
-                <p className="text-slate-500 text-sm mt-1 font-medium">Join forces on active initiatives needing cross-functional expertise.</p>
-            </div>
+        <div className="max-w-6xl mx-auto px-4 py-20">
+             <h1 className="text-3xl font-bold mb-8">System Administration</h1>
+             <div className="flex gap-4 mb-8 border-b border-slate-200">
+                 <button onClick={() => setActiveTab('users')} className={`pb-2 px-4 font-bold uppercase text-sm ${activeTab === 'users' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-400'}`}>Users</button>
+                 <button onClick={() => setActiveTab('settings')} className={`pb-2 px-4 font-bold uppercase text-sm ${activeTab === 'settings' ? 'border-b-2 border-slate-900 text-slate-900' : 'text-slate-400'}`}>Settings</button>
+             </div>
 
-            {collabIdeas.length === 0 ? (
-                <div className="text-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <p className="text-slate-400 uppercase tracking-widest text-sm">No active collaboration requests.</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {collabIdeas.map(idea => (
-                         <Card key={idea.id} className="flex flex-col h-full hover:border-blue-300 transition-colors border-l-4 border-l-blue-500 bg-white p-6 shadow-md">
-                             <div className="flex-1">
-                                 <div className="flex items-center justify-between mb-4">
-                                     <Badge color="blue">{idea.department}</Badge>
-                                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(idea.createdAt).toLocaleDateString()}</span>
-                                 </div>
-                                 <h3 className="text-xl font-bold text-slate-900 mb-2">{idea.title}</h3>
-                                 <p className="text-sm text-slate-600 line-clamp-3 mb-4">{idea.description}</p>
-                                 
-                                 <div className="bg-slate-50 p-3 rounded text-xs border border-slate-100 mb-4">
-                                     <span className="font-bold text-slate-700 block mb-1 uppercase text-[10px]">Author</span>
-                                     <span className="text-slate-600">{idea.authorName}</span>
-                                 </div>
-                             </div>
-                             <div className="pt-0 mt-auto">
-                                 <Button onClick={() => handleJoin(idea)} variant="secondary" className="w-full text-xs uppercase border-blue-200 text-blue-700 hover:bg-blue-50">Contribute / Join</Button>
-                             </div>
-                        </Card>
-                    ))}
-                </div>
-            )}
+             {activeTab === 'users' && (
+                 <div className="bg-white rounded-lg shadow border border-slate-200 overflow-hidden">
+                     <table className="w-full text-sm text-left">
+                         <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                             <tr>
+                                 <th className="px-6 py-3">User</th>
+                                 <th className="px-6 py-3">Role</th>
+                                 <th className="px-6 py-3">Status</th>
+                                 <th className="px-6 py-3">Actions</th>
+                             </tr>
+                         </thead>
+                         <tbody className="divide-y divide-slate-100">
+                             {users.map(u => (
+                                 <tr key={u.id} className="hover:bg-slate-50">
+                                     <td className="px-6 py-4 font-medium">
+                                         <div>{u.username}</div>
+                                         <div className="text-xs text-slate-400">{u.email}</div>
+                                     </td>
+                                     <td className="px-6 py-4">{u.role}</td>
+                                     <td className="px-6 py-4">
+                                         <Badge color={u.status === UserStatus.ACTIVE ? 'green' : u.status === UserStatus.PENDING ? 'yellow' : 'red'}>{u.status}</Badge>
+                                     </td>
+                                     <td className="px-6 py-4 flex gap-2">
+                                         {u.status === UserStatus.PENDING && (
+                                             <>
+                                                 <Button variant="primary" className="py-1 px-3 text-xs" onClick={() => handleUserAction(u.id, 'approve')}>Approve</Button>
+                                                 <Button variant="danger" className="py-1 px-3 text-xs" onClick={() => handleUserAction(u.id, 'reject')}>Reject</Button>
+                                             </>
+                                         )}
+                                         {u.status === UserStatus.ACTIVE && u.role === UserRole.EMPLOYEE && (
+                                             <Button variant="secondary" className="py-1 px-3 text-xs" onClick={() => handleUserAction(u.id, 'promote')}>Make Manager</Button>
+                                         )}
+                                     </td>
+                                 </tr>
+                             ))}
+                         </tbody>
+                     </table>
+                 </div>
+             )}
+             
+             {activeTab === 'settings' && (
+                 <div className="p-8 text-center text-slate-400 bg-slate-50 rounded border border-slate-200">
+                     Global settings configuration would go here.
+                 </div>
+             )}
         </div>
     );
 };
@@ -1521,6 +992,7 @@ const Dashboard = () => {
   // Rating State
   const [ratingDetails, setRatingDetails] = useState<Record<string, number>>({});
   const [ratingComment, setRatingComment] = useState('');
+  const [isAutoEvaluating, setIsAutoEvaluating] = useState(false);
 
   // Carousel State
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1535,10 +1007,16 @@ const Dashboard = () => {
     const all = db.getIdeas();
     setPublished(all.filter(i => i.status === IdeaStatus.PUBLISHED));
 
+    // Dashboard Visibility Logic
     if (user?.role === UserRole.EMPLOYEE) {
+      // Employees: See only their own ideas
       setIdeas(all.filter(i => i.authorId === user.id));
     } else {
-      setIdeas(all);
+      // Managers, Admins, and Approved Guests: See everything EXCEPT drafts
+      // (Unless they are the author of the draft)
+      setIdeas(all.filter(i => 
+        i.status !== IdeaStatus.DRAFT || i.authorId === user?.id
+      ));
     }
   }, [user]);
 
@@ -1620,6 +1098,23 @@ const Dashboard = () => {
       return { percentage: Math.round(percentage), grade };
   };
 
+  const handleAutoEvaluate = async () => {
+    if (!selectedIdea) return;
+    setIsAutoEvaluating(true);
+    const kpis = getCurrentKPIs(selectedIdea);
+    
+    // Call AI Service
+    const result = await aiService.generateEvaluation(selectedIdea.title, selectedIdea.description, kpis);
+    
+    if (result) {
+        setRatingDetails(result.scores);
+        setRatingComment(result.comment);
+    } else {
+        alert("AI Evaluation failed. Please try again manually.");
+    }
+    setIsAutoEvaluating(false);
+  };
+
   const submitRating = () => {
     if (!selectedIdea || !user) return;
     
@@ -1657,7 +1152,6 @@ const Dashboard = () => {
   };
 
   const copyShareLink = (id: string) => {
-      // Use pathname to ensure we include the repo name (e.g., /IDB-EPROM/) for GitHub Pages
       const baseUrl = window.location.href.split('#')[0];
       const url = `${baseUrl}#/view/${id}`;
       navigator.clipboard.writeText(url);
@@ -1919,6 +1413,27 @@ const Dashboard = () => {
                 </div>
               </div>
 
+              {/* AI Auto-Evaluation Button */}
+              <div className="mb-6 flex justify-end">
+                  <button 
+                    onClick={handleAutoEvaluate} 
+                    disabled={isAutoEvaluating}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold uppercase tracking-wider hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-lg"
+                  >
+                      {isAutoEvaluating ? (
+                          <>
+                            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                            Analyzing...
+                          </>
+                      ) : (
+                          <>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                            Auto-Evaluate with AI
+                          </>
+                      )}
+                  </button>
+              </div>
+
               <div className="space-y-6 mb-8">
                   {currentReviewKPIs.map(kpi => (
                       <div key={kpi.id} className="bg-slate-50 p-5 rounded border border-slate-200">
@@ -1958,56 +1473,105 @@ const Dashboard = () => {
            </Card>
         </div>
       )}
+      
+      {/* Global AI Chat Assistant */}
+      {user && <AIChat />}
     </div>
   );
 };
 
-const App = () => {
-  const [user, setUser] = useState<User | null>(db.getCurrentUser());
+// ... (Rest of App.tsx remains unchanged) ...
+const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // ... (No changes here, context remains same) ...
+  const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<AppSettings>(db.getSettings());
 
+  useEffect(() => {
+    setUser(db.getCurrentUser());
+  }, []);
+
   const login = async (u: string, p: string) => {
-    // In a real app this would be async
-    const user = db.loginUser(u, p);
-    setUser(user);
-    return Promise.resolve();
+    // Simulate Async
+    await new Promise(r => setTimeout(r, 500));
+    const loggedUser = db.loginUser(u, p);
+    setUser(loggedUser);
   };
 
   const logout = () => {
     db.logoutUser();
     setUser(null);
   };
-  
+
   const refreshSettings = () => {
     setSettings(db.getSettings());
   };
 
   return (
     <AppContext.Provider value={{ user, settings, login, logout, refreshSettings }}>
-        {/* Using HashRouter for GitHub Pages compatibility */}
-        <HashRouter>
-            <div className="min-h-screen bg-eprom-bg font-sans text-slate-900 selection:bg-slate-900 selection:text-white">
-                <Navbar />
-                <Routes>
-                    <Route path="/" element={<LandingPage />} />
-                    <Route path="/auth" element={<AuthPage />} />
-                    <Route path="/view/:id" element={<SharedIdeaPage />} />
-                    
-                    {/* Protected Routes */}
-                    <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/auth" replace />} />
-                    <Route path="/search" element={user ? <SearchPage /> : <Navigate to="/auth" replace />} />
-                    <Route path="/submit" element={user ? <IdeaFormPage /> : <Navigate to="/auth" replace />} />
-                    <Route path="/collaboration" element={user ? <CollaborationHub /> : <Navigate to="/auth" replace />} />
-                    <Route path="/admin" element={user && user.role === UserRole.ADMIN ? <AdminPanel /> : <Navigate to="/dashboard" replace />} />
-                    
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-                {/* Global AI Chat - moved from Dashboard to App so it persists */}
-                {user && <AIChat />}
-            </div>
-        </HashRouter>
+      {children}
     </AppContext.Provider>
   );
+};
+
+// ... (Rest of App component unchanged) ...
+const App = () => {
+  return (
+    <HashRouter>
+      <AppProvider>
+        <div className="min-h-screen flex flex-col font-sans text-slate-800 bg-eprom-bg selection:bg-slate-900 selection:text-white">
+          <Navbar />
+          <div className="flex-grow">
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/view/:id" element={<SharedIdeaPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              
+              {/* Dashboard is open to all logged in users, role logic handled inside */}
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+
+              <Route path="/collaboration" element={
+                  <ProtectedRoute excludedRoles={[UserRole.ADMIN]}>
+                      <CollaborationHub />
+                  </ProtectedRoute>
+              } />
+              
+              <Route path="/submit" element={
+                <ProtectedRoute roles={[UserRole.EMPLOYEE]}>
+                  <IdeaFormPage />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/admin" element={
+                <ProtectedRoute roles={[UserRole.ADMIN]}>
+                  <AdminPanel />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </div>
+          <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-10 text-center text-xs uppercase tracking-widest">
+            <p className="mb-2">&copy; {new Date().getFullYear()} EPROM Systems</p>
+            <p className="text-[10px]">Confidential & Proprietary</p>
+          </footer>
+        </div>
+      </AppProvider>
+    </HashRouter>
+  );
+};
+
+// Re-add ProtectedRoute helper since it was inside App in previous context but useful to keep explicit
+const ProtectedRoute = ({ children, roles, excludedRoles }: { children: React.ReactElement, roles?: UserRole[], excludedRoles?: UserRole[] }) => {
+  const { user } = useAppContext();
+  
+  if (!user) return <Navigate to="/auth" />;
+  if (roles && !roles.includes(user.role)) return <Navigate to="/" />;
+  if (excludedRoles && excludedRoles.includes(user.role)) return <Navigate to="/admin" />; 
+  
+  return children;
 };
 
 export default App;

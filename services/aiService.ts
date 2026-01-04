@@ -1,4 +1,5 @@
 import { GoogleGenAI, Content, Type, Schema } from "@google/genai";
+import { RatingDimension } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -101,6 +102,68 @@ export interface ManagerAnalysisResult {
   pros: string[];
   cons: string[];
 }
+
+export interface AIEvaluationResult {
+  scores: Record<string, number>; // kpiId -> score (1-5)
+  comment: string;
+}
+
+export const generateEvaluation = async (
+  title: string, 
+  description: string, 
+  kpis: RatingDimension[]
+): Promise<AIEvaluationResult | null> => {
+  try {
+    // Construct a dynamic schema based on the KPI IDs provided
+    const scoresProperties: Record<string, any> = {};
+    const requiredFields = ["comment"];
+    
+    kpis.forEach(k => {
+      scoresProperties[k.id] = { type: Type.INTEGER, description: `Score (1-5) for ${k.name}` };
+      requiredFields.push(k.id);
+    });
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `You are a strict technical innovation manager evaluating a proposal.
+      
+      Proposal Title: "${title}"
+      Proposal Description: "${description}"
+      
+      Evaluate this proposal based on the following dimensions (1 = Poor, 5 = Excellent):
+      ${kpis.map(k => `- ${k.name} (ID: ${k.id}): ${k.description}`).join('\n')}
+      
+      Provide an integer score (1-5) for each dimension ID and a constructive summary comment justifying the scores.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            comment: { type: Type.STRING, description: "A professional justification of the scores." },
+            ...scoresProperties
+          },
+          required: requiredFields // Ideally we list them, but dynamic is tricky in schema. The prompt usually handles it.
+        }
+      }
+    });
+
+    if (response.text) {
+      const data = JSON.parse(response.text);
+      const comment = data.comment;
+      // Extract scores excluding comment
+      const scores: Record<string, number> = {};
+      kpis.forEach(k => {
+        if (data[k.id]) scores[k.id] = data[k.id];
+      });
+      
+      return { scores, comment };
+    }
+    return null;
+  } catch (error) {
+    console.error("Evaluation Error:", error);
+    return null;
+  }
+};
 
 export const generateManagerAnalysis = async (title: string, description: string): Promise<ManagerAnalysisResult | null> => {
   try {
