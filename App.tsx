@@ -373,10 +373,10 @@ const SearchPage = () => {
                          <Card key={idea.id} className={`flex flex-col justify-between hover:border-slate-300 transition-colors cursor-pointer group relative overflow-hidden rounded-xl ${idea.coverImage ? 'bg-slate-900 border-none' : 'p-6'}`} onClick={() => navigate('/dashboard')}>
                              {idea.coverImage && (
                                 <>
-                                  <div className="absolute inset-0 z-0">
-                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-70" />
+                                  <div className="absolute inset-0 z-0 bg-slate-950">
+                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-30" />
                                   </div>
-                                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
+                                  <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-900/40" />
                                 </>
                              )}
                              
@@ -385,8 +385,8 @@ const SearchPage = () => {
                                      <Badge color="blue">{idea.category}</Badge>
                                      <Badge color="gray">{idea.status}</Badge>
                                  </div>
-                                 <h3 className={`text-xl font-bold ${idea.coverImage ? 'text-white' : 'text-slate-800'}`}>{idea.title}</h3>
-                                 <p className={`text-sm line-clamp-2 mt-2 font-medium ${idea.coverImage ? 'text-slate-300' : 'text-slate-500'}`}>{idea.description}</p>
+                                 <h3 className={`text-xl font-bold ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-800'}`}>{idea.title}</h3>
+                                 <p className={`text-sm line-clamp-2 mt-2 font-medium ${idea.coverImage ? 'text-slate-300 drop-shadow-md' : 'text-slate-500'}`}>{idea.description}</p>
                              </div>
                              <div className={`mt-4 relative z-10 flex justify-between items-end ${idea.coverImage ? 'px-6 pb-6' : ''}`}>
                                  <div className={`text-xs uppercase font-bold tracking-wide ${idea.coverImage ? 'text-slate-400' : 'text-slate-400'}`}>{idea.authorName}</div>
@@ -419,7 +419,7 @@ const LandingPage = () => {
         return { ...i, avgScore };
       })
       .sort((a, b) => b.avgScore - a.avgScore)
-      .slice(0, 10);
+      .slice(10);
       
     setPublishedIdeas(topRated);
   }, []);
@@ -479,12 +479,12 @@ const LandingPage = () => {
               <Card key={idea.id} className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500">
                  {/* Background Image Logic */}
                  {idea.coverImage && (
-                    <div className="absolute inset-0 z-0">
-                      <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-90" />
+                    <div className="absolute inset-0 z-0 bg-slate-950">
+                      <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-30" />
                     </div>
                  )}
                  {/* Dark Overlay (Fade) */}
-                 <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
+                 <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-900/40" />
 
                  {/* Rank Badge */}
                  <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">
@@ -498,7 +498,7 @@ const LandingPage = () => {
                     <span className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">{new Date(idea.createdAt).toLocaleDateString()}</span>
                   </div>
                   
-                  <h3 className="text-3xl font-bold text-white mb-3 leading-none drop-shadow-lg tracking-tight">{idea.title}</h3>
+                  <h3 className="text-3xl font-bold text-white mb-3 leading-none drop-shadow-xl tracking-tight">{idea.title}</h3>
                   <p className="text-slate-200 text-sm line-clamp-2 mb-6 font-medium drop-shadow-md opacity-90">{idea.description}</p>
                 
                   <div className="flex items-center justify-between pt-5 border-t border-white/10">
@@ -940,7 +940,7 @@ const IdeaFormPage = () => {
 
                 <div className="pt-6 border-t border-slate-100 flex justify-end gap-4">
                      <Button variant="ghost" onClick={() => navigate('/dashboard')} className="uppercase text-xs font-bold text-slate-400">Cancel</Button>
-                     <Button type="submit" variant="primary" className="px-8 shadow-xl bg-slate-900 text-white uppercase font-bold tracking-widest text-xs">Submit Protocol</Button>
+                     <Button type="submit" variant="primary" className="px-8 shadow-xl bg-slate-900 text-white uppercase font-bold tracking-widest text-xs hover:bg-slate-800 transition-colors">Submit Protocol</Button>
                 </div>
             </form>
         </Card>
@@ -1353,9 +1353,6 @@ const AdminPanel = () => {
   );
 };
 
-// ... (Rest of the components remain largely the same, they inherit the new styles from index.html and Card) ...
-// The following exports are needed to ensure the file is complete.
-
 // 5. Shared External View (Read Only)
 const SharedIdeaPage = () => {
     const { id } = useParams();
@@ -1388,17 +1385,17 @@ const SharedIdeaPage = () => {
             <div className={`mb-8 relative overflow-hidden rounded-xl shadow-2xl ${idea.coverImage ? 'p-10 text-white' : 'p-10 bg-white border border-slate-200'}`}>
                 {idea.coverImage && (
                     <>
-                     <div className="absolute inset-0 z-0">
-                         <img src={idea.coverImage} className="w-full h-full object-cover" />
+                     <div className="absolute inset-0 z-0 bg-slate-950">
+                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-30 mix-blend-overlay" />
                      </div>
-                     <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
+                     <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-transparent" />
                     </>
                 )}
                 
                 <div className="relative z-10">
                     <Badge color="blue" className="bg-blue-500/80 text-white border-none backdrop-blur-sm shadow-sm">SHARED RECORD</Badge>
-                    <h1 className={`text-4xl font-bold mt-4 tracking-tight leading-tight ${idea.coverImage ? 'text-white' : 'text-slate-900'}`}>{idea.title}</h1>
-                    <div className={`flex items-center gap-4 mt-4 text-xs uppercase tracking-widest font-bold ${idea.coverImage ? 'text-slate-300' : 'text-slate-500'}`}>
+                    <h1 className={`text-4xl font-bold mt-4 tracking-tight leading-tight ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-900'}`}>{idea.title}</h1>
+                    <div className={`flex items-center gap-4 mt-4 text-xs uppercase tracking-widest font-bold ${idea.coverImage ? 'text-slate-300 drop-shadow-md' : 'text-slate-500'}`}>
                         <span>{idea.authorName}</span>
                         <div className="w-1 h-1 bg-current rounded-full"></div>
                         <span>{new Date(idea.createdAt).toLocaleDateString()}</span>
@@ -1452,10 +1449,10 @@ const CollaborationHub = () => {
                     <Card key={idea.id} className={`transition-all hover:shadow-2xl hover:scale-[1.01] duration-300 relative overflow-hidden rounded-xl ${idea.coverImage ? 'bg-slate-900 border-none' : 'p-8 border-l-4 border-l-slate-900 bg-white'}`}>
                         {idea.coverImage && (
                             <>
-                                <div className="absolute inset-0 z-0">
-                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 hover:scale-105 opacity-60" />
+                                <div className="absolute inset-0 z-0 bg-slate-950">
+                                    <img src={idea.coverImage} alt="Cover" className="w-full h-full object-cover transition-transform duration-700 hover:scale-105 opacity-30" />
                                 </div>
-                                <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-black/40" />
+                                <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/90 to-slate-900/60" />
                             </>
                         )}
 
@@ -1463,10 +1460,10 @@ const CollaborationHub = () => {
                             <div className="flex justify-between items-start mb-6">
                                 <div>
                                     <Badge color="amber" className={`${idea.coverImage ? 'bg-amber-500/20 text-amber-100 border-amber-500/30' : ''}`}>Open For Collab</Badge>
-                                    <h3 className={`text-2xl font-bold mt-3 leading-tight ${idea.coverImage ? 'text-white drop-shadow-md' : 'text-slate-900'}`}>{idea.title}</h3>
+                                    <h3 className={`text-2xl font-bold mt-3 leading-tight ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-900'}`}>{idea.title}</h3>
                                 </div>
                             </div>
-                            <p className={`text-sm mb-8 line-clamp-3 leading-relaxed ${idea.coverImage ? 'text-slate-300 font-medium' : 'text-slate-500'}`}>{idea.description}</p>
+                            <p className={`text-sm mb-8 line-clamp-3 leading-relaxed ${idea.coverImage ? 'text-slate-300 font-medium drop-shadow-md' : 'text-slate-500'}`}>{idea.description}</p>
                             
                             <div className={`${idea.coverImage ? 'bg-white/10 border-white/20' : 'bg-slate-50 border-slate-100'} p-5 rounded border mb-6 backdrop-blur-sm`}>
                                 <div className={`text-[10px] font-bold uppercase mb-3 tracking-widest ${idea.coverImage ? 'text-slate-300' : 'text-slate-400'}`}>Skill Requirements</div>
@@ -1480,7 +1477,7 @@ const CollaborationHub = () => {
                                 <div className={`text-xs uppercase tracking-wide ${idea.coverImage ? 'text-slate-400' : 'text-slate-500'}`}>
                                     Lead: <span className={`font-bold ${idea.coverImage ? 'text-white' : 'text-slate-900'}`}>{idea.authorName}</span>
                                 </div>
-                                <Button onClick={() => handleContribute(idea)} className="text-xs uppercase bg-white border border-slate-300 text-slate-900 font-bold hover:bg-slate-50 shadow-lg">Join Project</Button>
+                                <Button variant="secondary" onClick={() => handleContribute(idea)} className="text-xs uppercase border-slate-300 !text-black font-black hover:bg-slate-50 shadow-lg tracking-widest">Join Project</Button>
                             </div>
                         </div>
                     </Card>
@@ -1631,7 +1628,7 @@ const Dashboard = () => {
       const timeline = idea.dynamicData?.['timeline'] || (idea as any).timeline || 'N/A';
 
       const isDark = !!idea.coverImage;
-      const textClass = isDark ? 'text-slate-300' : 'text-slate-500';
+      const textClass = isDark ? 'text-slate-300 drop-shadow-sm' : 'text-slate-500';
       const labelClass = isDark ? 'text-slate-400' : 'text-slate-400';
       const bgClass = isDark ? 'bg-white/10 border-white/10 backdrop-blur' : 'bg-slate-50 border-slate-200';
 
@@ -1664,11 +1661,11 @@ const Dashboard = () => {
                   published.map(p => (
                       <div key={p.id} className="min-w-[320px] max-w-[320px] bg-slate-900 rounded-lg snap-start border border-slate-800 shadow-xl relative overflow-hidden group hover:border-eprom-accent transition-all h-[400px]">
                           {p.coverImage && (
-                              <div className="absolute inset-0 z-0">
-                                  <img src={p.coverImage} className="w-full h-full object-cover opacity-70 transition-transform duration-700 group-hover:scale-110" />
+                              <div className="absolute inset-0 z-0 bg-slate-950">
+                                  <img src={p.coverImage} className="w-full h-full object-cover opacity-30 transition-transform duration-700 group-hover:scale-110" />
                               </div>
                           )}
-                          <div className="absolute inset-0 z-0 bg-gradient-to-t from-black via-black/80 to-transparent" />
+                          <div className="absolute inset-0 z-0 bg-gradient-to-t from-slate-950 via-slate-900/80 to-transparent" />
                           
                           <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                               <button onClick={() => copyShareLink(p.id)} className="text-[10px] bg-white text-slate-900 font-bold uppercase px-3 py-1 rounded shadow-lg">Share</button>
@@ -1683,8 +1680,8 @@ const Dashboard = () => {
                                       </div>
                                   )}
                               </div>
-                              <h4 className="font-bold text-white mb-2 text-xl leading-tight drop-shadow-md" title={p.title}>{p.title}</h4>
-                              <p className="text-xs text-slate-300 mb-4 line-clamp-3 leading-relaxed font-medium">{p.description}</p>
+                              <h4 className="font-bold text-white mb-2 text-xl leading-tight drop-shadow-xl" title={p.title}>{p.title}</h4>
+                              <p className="text-xs text-slate-300 mb-4 line-clamp-3 leading-relaxed font-medium drop-shadow-md">{p.description}</p>
                               <div className="text-[10px] text-slate-400 pt-4 border-t border-white/10 flex justify-between uppercase tracking-wider font-bold">
                                   <span>{p.authorName}</span>
                                   <span>{new Date(p.createdAt).toLocaleDateString()}</span>
@@ -1714,22 +1711,22 @@ const Dashboard = () => {
           <Card key={idea.id} className={`transition-all hover:border-slate-300 relative overflow-hidden ${idea.parentIdeaId ? 'border-l-4 border-l-purple-500' : ''} ${idea.coverImage ? 'bg-slate-900 border-none' : 'p-8'}`}>
             {idea.coverImage && (
                 <>
-                    <div className="absolute inset-0 z-0">
-                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-60" />
+                    <div className="absolute inset-0 z-0 bg-slate-950">
+                         <img src={idea.coverImage} className="w-full h-full object-cover opacity-30" />
                     </div>
-                    <div className="absolute inset-0 z-0 bg-gradient-to-r from-black via-black/80 to-black/60" />
+                    <div className="absolute inset-0 z-0 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-900/50" />
                 </>
             )}
 
             <div className={`relative z-10 flex flex-col md:flex-row justify-between md:items-start gap-8 ${idea.coverImage ? 'p-8' : ''}`}>
               <div className="flex-1">
                  <div className="flex items-center gap-4 mb-4 flex-wrap">
-                    <h3 className={`text-2xl font-bold tracking-tight ${idea.coverImage ? 'text-white' : 'text-slate-900'}`}>{idea.title}</h3>
+                    <h3 className={`text-2xl font-bold tracking-tight ${idea.coverImage ? 'text-white drop-shadow-lg' : 'text-slate-900'}`}>{idea.title}</h3>
                     <Badge color={getStatusColor(idea.status)}>{idea.status}</Badge>
                     <Badge color="gray" className={idea.coverImage ? 'bg-white/20 text-white border-none' : ''}>{idea.category}</Badge>
                     {idea.parentIdeaId && <Badge color="amber">Linked</Badge>}
                  </div>
-                 <p className={`mb-8 leading-relaxed font-medium text-lg ${idea.coverImage ? 'text-slate-300' : 'text-slate-600'}`}>{idea.description}</p>
+                 <p className={`mb-8 leading-relaxed font-medium text-lg ${idea.coverImage ? 'text-slate-300 drop-shadow-md' : 'text-slate-600'}`}>{idea.description}</p>
                  
                  {renderDynamicSummary(idea)}
 
