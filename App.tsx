@@ -407,6 +407,7 @@ const LandingPage = () => {
   const [activeAnalysis, setActiveAnalysis] = useState<string | null>(null);
   const [aiAnalysisResult, setAiAnalysisResult] = useState<aiService.ManagerAnalysisResult | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const all = db.getIdeas();
@@ -419,7 +420,7 @@ const LandingPage = () => {
         return { ...i, avgScore };
       })
       .sort((a, b) => b.avgScore - a.avgScore)
-      .slice(10);
+      .slice(0, 10);
       
     setPublishedIdeas(topRated);
   }, []);
@@ -440,6 +441,12 @@ const LandingPage = () => {
     setAiAnalysisResult(null);
   }
 
+  const copyShareLink = (id: string) => {
+      const url = `${window.location.origin}/#/view/${id}`;
+      navigator.clipboard.writeText(url);
+      alert("Shareable link copied to clipboard!");
+  };
+
   return (
     <div className="min-h-screen bg-eprom-bg text-slate-800 pt-16">
       {/* Hero Area */}
@@ -449,11 +456,13 @@ const LandingPage = () => {
         <div className="relative z-10 max-w-7xl mx-auto text-center">
           <Badge color="gray" className="mb-8 inline-block bg-white/80 border-slate-200 shadow-sm text-slate-600 backdrop-blur-sm">Enterprise Innovation System</Badge>
           <h1 className="text-5xl md:text-8xl font-black mb-8 tracking-tighter text-slate-900 leading-[0.9]">
-            Future <span className="text-slate-400 font-light">Forged.</span>
+            EPROM Idea <span className="text-slate-400 font-light">bank.</span>
           </h1>
-          <p className="text-xl text-slate-500 max-w-2xl mx-auto mb-12 leading-relaxed font-medium">
-            The central nervous system for EPROM's operational excellence. 
-            Capture, refine, and deploy billion-dollar ideas.
+          <p className="text-2xl text-slate-900 max-w-2xl mx-auto mb-4 leading-relaxed font-bold tracking-tight">
+            Innovating Energy. Empowering Ideas.
+          </p>
+          <p className="text-lg text-slate-500 max-w-3xl mx-auto mb-12 leading-relaxed font-medium">
+            EPROM Idea Bank is the innovation hub for the oil and gas sector, designed to capture, develop, and implement groundbreaking ideas that enhance operational excellence and sustainability. By connecting expertise with creativity, we transform challenges into opportunities, driving the future of energy through collaboration and smart solutions.
           </p>
           {!user && (
             <Link to="/auth">
@@ -476,7 +485,11 @@ const LandingPage = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {publishedIdeas.map((idea, index) => (
-              <Card key={idea.id} className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500">
+              <Card 
+                  key={idea.id} 
+                  className="group relative h-[420px] overflow-hidden rounded-2xl border-none shadow-xl bg-slate-900 hover:shadow-2xl transition-all duration-500 cursor-pointer"
+                  onClick={() => navigate(`/view/${idea.id}`)}
+              >
                  {/* Background Image Logic */}
                  {idea.coverImage && (
                     <div className="absolute inset-0 z-0 bg-slate-950">
@@ -489,6 +502,16 @@ const LandingPage = () => {
                  {/* Rank Badge */}
                  <div className="absolute top-5 left-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md text-white flex items-center justify-center font-bold shadow-lg border border-white/20 z-20 text-lg">
                     {index + 1}
+                 </div>
+
+                 {/* Share Button */}
+                 <div className="absolute top-5 right-5 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
+                     <button 
+                         onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyShareLink(idea.id); }} 
+                         className="text-[10px] bg-white text-slate-900 font-bold uppercase px-3 py-1.5 rounded shadow-lg hover:bg-slate-100 transition-colors"
+                     >
+                         Share
+                     </button>
                  </div>
 
                  {/* Content Layer */}
@@ -855,12 +878,13 @@ const IdeaFormPage = () => {
                                      <div className="text-slate-400 mb-2">
                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                                      </div>
-                                     <span className="text-xs text-slate-500 uppercase font-bold">Upload Evidence</span>
+                                     <span className="text-xs text-slate-500 uppercase font-bold">Upload Cover Photo</span>
+                                     <span className="block text-[10px] text-slate-400 mt-1">Drag & Drop or Click to Browse</span>
                                  </div>
                              )}
                              <input type="file" onChange={handleImageUpload} accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" />
                          </div>
-                         {isAnalyzingImage && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><span className="text-xs font-bold animate-pulse text-slate-900">Analyzing Visual Data...</span></div>}
+                         {isAnalyzingImage && <div className="absolute inset-0 bg-white/80 flex items-center justify-center"><span className="text-xs font-bold animate-pulse text-slate-900">AI Analyzing Image...</span></div>}
                     </div>
                 </div>
 
