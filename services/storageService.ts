@@ -254,22 +254,24 @@ export const uploadImageToFirebase = async (file: File): Promise<string> => {
     }
 };
 
-// 2. Google Drive for Attachments (PDFs, Docs) via App Script
+// 2. Google Drive for Attachments (PDFs, Docs) via App Script with Fallback
 export const uploadToDrive = async (file: File): Promise<string> => {
-  // STRICTER LIMIT: 1MB to prevent Google Apps Script "Utilities.newBlob" crash
-  const LIMIT_MB = 1;
-  if (file.size > LIMIT_MB * 1024 * 1024) {
-    throw new Error(`File size exceeds ${LIMIT_MB}MB limit. Please upload a smaller file or compress it.`);
-  }
+  // Convert to Base64 first
+  const fullBase64 = await fileToBase64(file);
 
+  // Try Google Drive Script first
   try {
-    const base64 = await fileToBase64(file);
-    const content = base64.split(',')[1]; // Remove data URL prefix
+     // Check file size for Drive Script (limit to ~2MB)
+     if (file.size > 2 * 1024 * 1024) {
+         throw new Error("File exceeds 2MB limit for external drive upload.");
+     }
+
+    const content = fullBase64.split(',')[1]; // Remove data URL prefix
     
     const fileName = file.name || "uploaded_file";
     const mimeType = file.type || "application/octet-stream";
 
-    // Optimized Payload: Minimal data to prevent GAS from running out of memory/time
+    // Optimized Payload: Minimal data
     const payload = {
       filename: fileName,
       mimeType: mimeType,
@@ -295,17 +297,11 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     try {
         result = JSON.parse(text);
     } catch (e) {
-        console.error("Invalid JSON response:", text);
         throw new Error("Invalid response format from server.");
     }
 
     if (result.error || result.status === 'error') {
-        let errorMsg = result.error || result.message || "Unknown server error";
-        // Map common Apps Script memory error to user friendly message
-        if (errorMsg.includes("newBlob") || errorMsg.includes("Utilities")) {
-             errorMsg = "Server memory limit exceeded. Please try a file smaller than 1MB.";
-        }
-        throw new Error(errorMsg);
+        throw new Error(result.error || result.message || "Unknown server error");
     }
 
     const fileUrl = result.url || result.fileUrl || result.link || result.downloadUrl;
@@ -315,8 +311,20 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     }
 
     return fileUrl;
+
   } catch (error: any) {
-    console.error("Drive Upload failed", error);
-    throw new Error(error.message || "Upload failed. Please try a smaller file or checking internet connection.");
+    console.warn("Drive Upload failed, attempting fallback:", error.message);
+
+    // --- FALLBACK STRATEGY ---
+    // If the external script fails (e.g. quota, memory, or network),
+    // and the file is small enough (< 500KB) to fit comfortably in a Firestore document
+    // alongside other data (limit 1MB), we store it as a Base64 Data URI directly.
+    if (file.size < 500 * 1024) {
+        console.log("Using local storage fallback for small file.");
+        return fullBase64;
+    }
+
+    // If too large for fallback, throw the original error or a size warning
+    throw new Error("Upload failed. File is too large for local backup (max 500KB). Please try compressing your file.");
   }
 };
