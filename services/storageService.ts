@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { 
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc, 
+  initializeFirestore, getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc, 
   query, where 
 } from 'firebase/firestore';
 import { 
@@ -22,7 +22,19 @@ const firebaseConfig = (typeof window !== 'undefined' && (window as any).__fireb
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+
+// Initialize Firestore with settings to improve connectivity
+// We wrap in try-catch because in hot-reload environments, re-initializing throws an error
+let db: any;
+try {
+    db = initializeFirestore(app, {
+        experimentalForceLongPolling: true, 
+    });
+} catch (e) {
+    // If already initialized (e.g. multiple calls), get the existing instance
+    db = getFirestore(app);
+}
+
 const auth = getAuth(app);
 const storage = getStorage(app);
 
@@ -214,6 +226,21 @@ export const uploadImageToFirebase = async (file: File): Promise<string> => {
     if (!file.type.startsWith('image/')) {
         throw new Error('Only image files are allowed for this field.');
     }
+
+    // PRE-CHECK: If we are on GitHub Pages or a non-standard domain, Firebase Storage often blocks via CORS.
+    // We preemptively skip to Drive to avoid the ugly red console error.
+    if (window.location.hostname.includes('github.io') || window.location.hostname.includes('web.app')) {
+        console.log("Environment detected (GitHub/Hosted): Defaulting to Drive uploader to avoid CORS issues.");
+        try {
+            const driveUrl = await uploadToDrive(file);
+            if (driveUrl.includes('export=download')) {
+                return driveUrl.replace('export=download', 'export=view');
+            }
+            return driveUrl;
+        } catch (driveError: any) {
+            throw new Error(`Drive Upload failed: ${driveError.message}`);
+        }
+    }
     
     try {
       // Create a unique path: images/{timestamp}_{filename}
@@ -226,12 +253,9 @@ export const uploadImageToFirebase = async (file: File): Promise<string> => {
       const url = await getDownloadURL(snapshot.ref);
       return url;
     } catch (error: any) {
-      console.warn("Firebase Storage Upload failed. Checking for CORS/Network issue. Attempting fallback to Drive.", error);
-      // Fallback: If Firebase Storage fails (often due to unconfigured CORS on the bucket), 
-      // we use the Google Script (Drive) method which handles CORS via text/plain proxy.
+      console.warn("Firebase Storage Upload failed. Attempting fallback to Drive.", error);
       try {
         const driveUrl = await uploadToDrive(file);
-        // Drive URLs often need export=view for image tags, uploadToDrive might return download link
         if (driveUrl.includes('export=download')) {
             return driveUrl.replace('export=download', 'export=view');
         }

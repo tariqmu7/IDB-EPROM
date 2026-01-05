@@ -1,7 +1,7 @@
 import React from 'react';
 
 // Badge Component - Solid, high contrast
-export const Badge = ({ children, color = 'blue', className = '' }: { children: React.ReactNode, color?: string, className?: string }) => {
+export const Badge: React.FC<{ children?: React.ReactNode, color?: string, className?: string }> = ({ children, color = 'blue', className = '' }) => {
   const colors: Record<string, string> = {
     blue: 'bg-blue-100 text-blue-800 border border-blue-200',
     green: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
@@ -18,20 +18,20 @@ export const Badge = ({ children, color = 'blue', className = '' }: { children: 
 };
 
 // Button Component - Sharp edges, corporate feel
-export const Button = ({ 
+export const Button: React.FC<{ 
+  children?: React.ReactNode, 
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost', 
+  onClick?: () => void,
+  type?: 'button' | 'submit',
+  className?: string,
+  disabled?: boolean
+}> = ({ 
   children, 
   variant = 'primary', 
   onClick, 
   type = 'button', 
   className = '',
   disabled = false
-}: { 
-  children: React.ReactNode, 
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost', 
-  onClick?: () => void,
-  type?: 'button' | 'submit',
-  className?: string,
-  disabled?: boolean
 }) => {
   const base = "px-5 py-2.5 rounded font-semibold transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed text-sm tracking-wide uppercase shadow-sm";
   
@@ -86,7 +86,7 @@ export const Select = ({ label, options, ...props }: React.SelectHTMLAttributes<
 );
 
 // Card Component - Clean white with shadow
-export const Card = ({ children, className = '', onClick }: { children: React.ReactNode, className?: string, onClick?: () => void }) => (
+export const Card: React.FC<{ children?: React.ReactNode, className?: string, onClick?: () => void }> = ({ children, className = '', onClick }) => (
   <div onClick={onClick} className={`bg-white rounded-lg border border-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_16px_rgba(0,0,0,0.06)] transition-shadow duration-300 ${className}`}>
     {children}
   </div>

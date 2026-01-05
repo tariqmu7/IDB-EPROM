@@ -315,7 +315,7 @@ const AIChat = () => {
 
 // --- AppProvider Implementation ---
 
-const AppProvider = ({ children }: { children: React.ReactNode }) => {
+const AppProvider: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -460,7 +460,7 @@ const SharedIdeaPage = () => {
     const newRating: Rating = {
       managerId: user.id,
       managerName: user.username,
-      details: Object.entries(evalScores).map(([k, v]) => ({ dimensionId: k, score: v })),
+      details: Object.entries(evalScores).map(([k, v]) => ({ dimensionId: k, score: v as number })),
       totalScore: Number(weightedScore.toFixed(1)),
       percentage: Math.round(percentage),
       grade,
@@ -1237,6 +1237,30 @@ const IdeaFormPage = () => {
     );
 };
 
+const PendingUserRow: React.FC<{
+  u: User;
+  onApprove: (uid: string, role: UserRole) => void;
+  onReject: (uid: string) => void;
+  onDelete: (uid: string) => void;
+}> = ({ u, onApprove, onReject, onDelete }) => {
+  const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
+  return (
+    <tr className="hover:bg-amber-50 transition-colors bg-amber-50 border-l-4 border-amber-400">
+        <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
+        <td className="px-6 py-4 text-slate-600">{u.email}</td>
+        <td className="px-6 py-4 text-slate-600">{u.department}</td>
+        <td className="px-6 py-4"><select value={selectedRole} onChange={e => setSelectedRole(e.target.value as UserRole)} className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td>
+        <td className="px-6 py-4">
+            <div className="flex space-x-2">
+                <Button variant="ghost" onClick={() => onApprove(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button>
+                <Button variant="ghost" onClick={() => onReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button>
+                <Button variant="ghost" onClick={() => onDelete(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Delete</Button>
+            </div>
+        </td>
+    </tr>
+  );
+};
+
 const AdminPanel = () => {
     const { settings, refreshSettings } = useAppContext();
     const [users, setUsers] = useState<User[]>([]);
@@ -1305,25 +1329,6 @@ const AdminPanel = () => {
     const saveTemplate = async () => { if(!newTemplateName || newFields.length === 0) return; const t: FormTemplate = { id: editingTemplateId || Date.now().toString(), name: newTemplateName, description: newTemplateDesc, fields: newFields, ratingConfig: currentKPIs, isActive: true }; await db.saveTemplate(t); handleCancelEdit(); refreshData(); };
     const deleteTemplate = async (id: string) => { if (confirm("Are you sure?")) { await db.deleteTemplate(id); refreshData(); } }
 
-    const PendingUserRow = ({ u }: { u: User }) => {
-      const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.EMPLOYEE);
-      return (
-        <tr className="hover:bg-amber-50 transition-colors bg-amber-50 border-l-4 border-amber-400">
-            <td className="px-6 py-4 font-bold text-slate-800">{u.username}</td>
-            <td className="px-6 py-4 text-slate-600">{u.email}</td>
-            <td className="px-6 py-4 text-slate-600">{u.department}</td>
-            <td className="px-6 py-4"><select value={selectedRole} onChange={e => setSelectedRole(e.target.value as UserRole)} className="bg-white border border-slate-300 text-slate-800 text-xs rounded p-1"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td>
-            <td className="px-6 py-4">
-                <div className="flex space-x-2">
-                    <Button variant="ghost" onClick={() => handleUserApproval(u.id, selectedRole)} className="text-green-600 hover:text-green-700 text-xs px-2 py-1 uppercase font-bold">Approve</Button>
-                    <Button variant="ghost" onClick={() => handleUserReject(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Reject</Button>
-                    <Button variant="ghost" onClick={() => handleDeleteUser(u.id)} className="text-red-600 hover:text-red-700 text-xs px-2 py-1 uppercase font-bold">Delete</Button>
-                </div>
-            </td>
-        </tr>
-      );
-    }
-
     if (!settings) return null;
 
     return (
@@ -1337,7 +1342,15 @@ const AdminPanel = () => {
             
             {activeTab === 'users' && (
                 <Card className="overflow-hidden border-none shadow-lg">
-                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (<PendingUserRow key={u.id} u={u} />))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><span className="text-xs font-bold text-green-600 uppercase">Active</span></div></td></tr>))}</tbody></table></div>
+                    <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 border-b border-slate-200 uppercase text-xs font-bold text-slate-500 tracking-wider"><tr><th className="px-6 py-4">Username</th><th className="px-6 py-4">Email</th><th className="px-6 py-4">Department</th><th className="px-6 py-4">Role</th><th className="px-6 py-4">Status</th></tr></thead><tbody className="divide-y divide-slate-100">{users.filter(u => u.status === UserStatus.PENDING).map(u => (
+                        <PendingUserRow 
+                            key={u.id} 
+                            u={u} 
+                            onApprove={handleUserApproval} 
+                            onReject={handleUserReject} 
+                            onDelete={handleDeleteUser} 
+                        />
+                    ))}{users.filter(u => u.status === UserStatus.ACTIVE).map(u => (<tr key={u.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-4 font-bold text-slate-800">{u.username}</td><td className="px-6 py-4">{u.email}</td><td className="px-6 py-4">{u.department}</td><td className="px-6 py-4"><select value={u.role} onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)} className="bg-transparent border border-slate-200 rounded p-1 text-slate-700 focus:bg-white focus:border-slate-900 text-xs uppercase font-bold"><option value={UserRole.EMPLOYEE}>Employee</option><option value={UserRole.MANAGER}>Manager</option><option value={UserRole.ADMIN}>Admin</option><option value={UserRole.GUEST}>Guest</option></select></td><td className="px-6 py-4"><div className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div><span className="text-xs font-bold text-green-600 uppercase">Active</span></div></td></tr>))}</tbody></table></div>
                 </Card>
             )}
 
