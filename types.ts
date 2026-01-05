@@ -33,7 +33,7 @@ export enum IdeaStatus {
 }
 
 // Dynamic Form Definitions
-export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'date';
+export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'checkbox' | 'date' | 'image';
 
 export interface FormField {
   id: string;

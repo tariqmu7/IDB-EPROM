@@ -364,6 +364,7 @@ const AppProvider: React.FC<{ children?: React.ReactNode }> = ({ children }) => 
 // --- Pages ---
 
 const SharedIdeaPage = () => {
+  // ... (SharedIdeaPage content remains same)
   const { id } = useParams();
   const { user } = useAppContext();
   const navigate = useNavigate();
@@ -541,7 +542,12 @@ const SharedIdeaPage = () => {
                    {Object.entries(idea.dynamicData).map(([key, val]) => (
                       <div key={key}>
                          <span className="block text-xs font-bold uppercase text-slate-500 mb-1">{key}</span>
-                         <span className="font-medium text-slate-900">{val.toString()}</span>
+                         {/* Check if val is a long base64 string (image) */}
+                         {(typeof val === 'string' && val.startsWith('data:image')) ? (
+                            <img src={val} alt={key} className="h-32 w-auto object-contain rounded border border-slate-200" />
+                         ) : (
+                            <span className="font-medium text-slate-900">{val.toString()}</span>
+                         )}
                       </div>
                    ))}
                 </div>
@@ -639,6 +645,8 @@ const SharedIdeaPage = () => {
     </div>
   );
 };
+
+// ... (Dashboard, CollaborationHub, SearchPage, LandingPage, AuthPage components remain unchanged)
 
 const Dashboard = () => {
   const { user } = useAppContext();
@@ -753,7 +761,6 @@ const Dashboard = () => {
     </div>
   );
 };
-
 const CollaborationHub = () => {
     const [collabIdeas, setCollabIdeas] = useState<Idea[]>([]);
     const navigate = useNavigate();
@@ -794,7 +801,6 @@ const CollaborationHub = () => {
         </div>
     );
 };
-
 const SearchPage = () => {
     const [searchParams] = useSearchParams();
     const query = searchParams.get('q') || '';
@@ -855,7 +861,6 @@ const SearchPage = () => {
         </div>
     );
 };
-
 const LandingPage = () => {
   const [publishedIdeas, setPublishedIdeas] = useState<Idea[]>([]);
   const { user } = useAppContext();
@@ -919,7 +924,6 @@ const LandingPage = () => {
     </div>
   );
 };
-
 const AuthPage = () => {
   const { login, user } = useAppContext();
   const navigate = useNavigate();
@@ -996,7 +1000,6 @@ const AuthPage = () => {
     </div>
   );
 };
-
 const IdeaFormPage = () => {
     const { user, settings } = useAppContext();
     const navigate = useNavigate();
@@ -1014,6 +1017,7 @@ const IdeaFormPage = () => {
     const [attachments, setAttachments] = useState<string[]>(editingIdea?.attachments || []);
     const [isUploading, setIsUploading] = useState(false);
     const [isUploadingCover, setIsUploadingCover] = useState(false);
+    const [uploadingFieldId, setUploadingFieldId] = useState<string | null>(null);
 
     const [templates, setTemplates] = useState<FormTemplate[]>([]);
     const { isRecording, startRecording, stopRecording } = useRecorder();
@@ -1067,6 +1071,20 @@ const IdeaFormPage = () => {
                 alert("Image Upload Failed: " + err.message);
             } finally {
                 setIsUploadingCover(false);
+            }
+        }
+    }
+
+    const handleDynamicImageUpload = async (fieldId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files?.[0]) {
+            setUploadingFieldId(fieldId);
+            try {
+                const url = await db.uploadImageToFirebase(e.target.files[0]);
+                setDynamicData(prev => ({...prev, [fieldId]: url}));
+            } catch (err: any) {
+                alert("Image Upload Failed: " + err.message);
+            } finally {
+                setUploadingFieldId(null);
             }
         }
     }
@@ -1195,7 +1213,7 @@ const IdeaFormPage = () => {
                         <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">02 // Specific Data</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {currentTemplate.fields.map((field) => (
-                                <div key={field.id} className={field.type === 'textarea' ? 'col-span-1 md:col-span-2' : ''}>
+                                <div key={field.id} className={field.type === 'textarea' || field.type === 'image' ? 'col-span-1 md:col-span-2' : ''}>
                                     {field.type === 'textarea' ? (
                                         <Textarea label={field.label} required={field.required} value={dynamicData[field.id] || ''} onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})} />
                                     ) : field.type === 'select' && field.options ? (
@@ -1206,6 +1224,22 @@ const IdeaFormPage = () => {
                                                 <input type="checkbox" checked={!!dynamicData[field.id]} onChange={(e) => setDynamicData({...dynamicData, [field.id]: e.target.checked})} className="form-checkbox h-5 w-5 text-eprom-blue rounded border-slate-300" />
                                                 <span className="ml-2 text-sm text-slate-700 font-medium">{field.label}</span>
                                             </label>
+                                        </div>
+                                    ) : field.type === 'image' ? (
+                                        <div className="mb-5">
+                                            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">{field.label} {field.required && <span className="text-red-500">*</span>}</label>
+                                            <div className="flex items-center gap-4">
+                                                 <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded text-xs font-bold uppercase transition-colors border border-slate-200">
+                                                    <span>{uploadingFieldId === field.id ? 'Uploading...' : 'Upload Image'}</span>
+                                                    <input type="file" accept="image/*" onChange={(e) => handleDynamicImageUpload(field.id, e)} disabled={uploadingFieldId === field.id} className="hidden" />
+                                                </label>
+                                                {dynamicData[field.id] && (
+                                                    <div className="relative group w-16 h-16">
+                                                        <img src={dynamicData[field.id]} alt="Uploaded" className="w-full h-full object-cover rounded border border-slate-300" />
+                                                        <button type="button" onClick={() => setDynamicData({...dynamicData, [field.id]: ''})} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] shadow-sm">×</button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     ) : (
                                         <Input label={field.label} type={field.type} required={field.required} value={dynamicData[field.id] || ''} onChange={e => setDynamicData({...dynamicData, [field.id]: e.target.value})} />
@@ -1239,7 +1273,7 @@ const IdeaFormPage = () => {
                 </Card>
 
                 <div className="flex justify-end gap-4 pt-4">
-                    <Button type="submit" disabled={isUploading || isUploadingCover} className="px-12 py-4 shadow-xl bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-widest text-sm">
+                    <Button type="submit" disabled={isUploading || isUploadingCover || !!uploadingFieldId} className="px-12 py-4 shadow-xl bg-slate-900 hover:bg-slate-800 text-white font-bold tracking-widest text-sm">
                         {isUploading ? 'Processing...' : (editingIdea && (editingIdea.status === IdeaStatus.NEEDS_REVISION || editingIdea.status === IdeaStatus.REJECTED) ? 'Resubmit Protocol' : 'Launch Protocol')}
                     </Button>
                 </div>
@@ -1279,7 +1313,7 @@ const AdminPanel = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'settings' | 'forms'>('users');
     const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
-    // State for forms ... (same as before)
+    // State for forms
     const [newCat, setNewCat] = useState('');
     const [newDept, setNewDept] = useState('');
     const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -1329,15 +1363,46 @@ const AdminPanel = () => {
         } 
     };
 
-    // ... (Template management same as before, just async calls)
-    const addFieldToTemplate = () => { if(!editingField.label || !editingField.type) return; const newField: FormField = { id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(), label: editingField.label, type: editingField.type as any, required: editingField.required || false, options: editingField.options ? (editingField.options as any).split(',') : undefined }; setNewFields([...newFields, newField]); setEditingField({}); };
+    const addFieldToTemplate = () => { 
+        if(!editingField.label || !editingField.type) return; 
+        const newField: FormField = { 
+            id: editingField.label.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now(), 
+            label: editingField.label, 
+            type: editingField.type as any, 
+            required: editingField.required || false, 
+            options: editingField.options ? (editingField.options as any).split(',') : undefined 
+        }; 
+        setNewFields([...newFields, newField]); 
+        setEditingField({}); 
+    };
+    
     const addKPI = () => { if (!newKPI.name || !newKPI.weight) return; const k: RatingDimension = { id: (newKPI.name.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now()).substring(0, 15), name: newKPI.name, description: newKPI.description || '', weight: Number(newKPI.weight) }; setCurrentKPIs([...currentKPIs, k]); setNewKPI({}); };
     const removeKPI = (id: string) => { setCurrentKPIs(currentKPIs.filter(k => k.id !== id)); };
     const resetKPIs = () => setCurrentKPIs(DEFAULT_KPIS);
     const totalWeight = currentKPIs.reduce((sum, k) => sum + k.weight, 0);
     const handleEditTemplate = (t: FormTemplate) => { setEditingTemplateId(t.id); setNewTemplateName(t.name); setNewTemplateDesc(t.description); setNewFields(t.fields); setCurrentKPIs(t.ratingConfig || []); window.scrollTo({ top: 0, behavior: 'smooth' }); };
     const handleCancelEdit = () => { setEditingTemplateId(null); setNewTemplateName(''); setNewTemplateDesc(''); setNewFields([]); setCurrentKPIs(DEFAULT_KPIS); };
-    const saveTemplate = async () => { if(!newTemplateName || newFields.length === 0) return; const t: FormTemplate = { id: editingTemplateId || Date.now().toString(), name: newTemplateName, description: newTemplateDesc, fields: newFields, ratingConfig: currentKPIs, isActive: true }; await db.saveTemplate(t); handleCancelEdit(); refreshData(); };
+    
+    const saveTemplate = async () => { 
+        if(!newTemplateName || newFields.length === 0) return; 
+        const t: FormTemplate = { 
+            id: editingTemplateId || Date.now().toString(), 
+            name: newTemplateName, 
+            description: newTemplateDesc, 
+            fields: newFields, 
+            ratingConfig: currentKPIs, 
+            isActive: true 
+        }; 
+        
+        // Sanitization: Firestore hates 'undefined'. 
+        // We ensure a clean object is passed.
+        const sanitized = JSON.parse(JSON.stringify(t));
+        
+        await db.saveTemplate(sanitized); 
+        handleCancelEdit(); 
+        refreshData(); 
+    };
+    
     const deleteTemplate = async (id: string) => { if (confirm("Are you sure?")) { await db.deleteTemplate(id); refreshData(); } }
 
     if (!settings) return null;
@@ -1394,7 +1459,7 @@ const AdminPanel = () => {
                                 </div>
                                 <div className="grid grid-cols-12 gap-3 items-end bg-slate-50 p-4 rounded border border-slate-200">
                                     <div className="col-span-4"><Input label="Label" value={editingField.label || ''} onChange={e => setEditingField({...editingField, label: e.target.value})} className="mb-0" /></div>
-                                    <div className="col-span-3"><Select label="Type" options={['text', 'textarea', 'number', 'select', 'checkbox', 'date']} value={editingField.type || ''} onChange={e => setEditingField({...editingField, type: e.target.value as any})} className="mb-0" /></div>
+                                    <div className="col-span-3"><Select label="Type" options={['text', 'textarea', 'number', 'select', 'checkbox', 'date', 'image']} value={editingField.type || ''} onChange={e => setEditingField({...editingField, type: e.target.value as any})} className="mb-0" /></div>
                                     <div className="col-span-2 flex items-center h-[42px]"><label className="flex items-center"><input type="checkbox" checked={editingField.required || false} onChange={e => setEditingField({...editingField, required: e.target.checked})} className="mr-2"/> <span className="text-xs font-bold uppercase text-slate-500">Req</span></label></div>
                                     <div className="col-span-3"><Button onClick={addFieldToTemplate} className="w-full text-xs">Add Field</Button></div>
                                     {editingField.type === 'select' && (<div className="col-span-12 mt-3"><Input label="Options (comma separated)" value={(editingField.options as any) || ''} onChange={e => setEditingField({...editingField, options: e.target.value as any})} className="mb-0" /></div>)}
