@@ -19,6 +19,14 @@ const firebaseConfig = (typeof window !== 'undefined' && (window as any).__fireb
 // We check .apps.length to avoid re-initialization errors during hot-reload
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
+  // Initialize settings once immediately after app creation
+  try {
+    firebase.firestore().settings({
+        experimentalForceLongPolling: true, 
+    });
+  } catch (e) {
+    // Ignore if settings already applied
+  }
 }
 
 const app = firebase.app();
@@ -26,15 +34,6 @@ const db = firebase.firestore();
 const auth = firebase.auth();
 const storage = firebase.storage();
 
-// Initialize Firestore settings
-// Force long polling to fix "Could not reach Cloud Firestore backend" in restrictive networks
-try {
-    db.settings({
-        experimentalForceLongPolling: true, 
-    });
-} catch (e) {
-    // Settings might have been applied already, ignore error
-}
 
 // --- Google Drive Script ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywVx70i2DXMf90cuMkE84Jn3rNlIr6dQJwXdoVx7l9kzzSXU-9uxn1MnrbWnJRRu6b/exec";
@@ -262,19 +261,17 @@ export const uploadToDrive = async (file: File): Promise<string> => {
 
   try {
     const base64 = await fileToBase64(file);
-    const content = base64.split(',')[1];
+    const content = base64.split(',')[1]; // Remove data URL prefix
     
     const fileName = file.name || "uploaded_file";
     const mimeType = file.type || "application/octet-stream";
 
+    // Optimized Payload: Minimal data to prevent GAS from running out of memory/time
+    // We do NOT send 'file', 'data', and 'base64' all at once. Just one.
     const payload = {
       filename: fileName,
-      name: fileName,
       mimeType: mimeType,
-      type: mimeType,
-      data: content,
-      base64: content,
-      file: content
+      base64: content 
     };
 
     console.log("Uploading file to Drive...", { fileName, mimeType });

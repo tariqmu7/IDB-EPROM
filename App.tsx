@@ -1033,9 +1033,15 @@ const IdeaFormPage = () => {
     const handleEnhance = async () => {
         if(!description) return;
         setIsEnhancing(true);
-        const enhanced = await aiService.enhanceIdeaText(description);
-        setDescription(enhanced);
-        setIsEnhancing(false);
+        try {
+            const enhanced = await aiService.enhanceIdeaText(description);
+            setDescription(enhanced);
+        } catch (error) {
+            console.error(error);
+            alert("AI Enhancement Failed. Please check your API Key or try again later.");
+        } finally {
+            setIsEnhancing(false);
+        }
     }
 
     const handleAudioInput = async () => {
@@ -1099,6 +1105,7 @@ const IdeaFormPage = () => {
             status = IdeaStatus.SUBMITTED;
         }
 
+        // Sanitize object to remove undefined values before sending to Firestore
         const newIdea: Idea = {
             id: editingIdea?.id || Date.now().toString(),
             authorId: user.id,
@@ -1112,17 +1119,21 @@ const IdeaFormPage = () => {
             coverImage,
             templateId,
             templateName: template?.name || 'Unknown',
-            parentIdeaId: parentIdea?.id || editingIdea?.parentIdeaId,
+            // Fix: Explicitly handle potential undefined values which cause Firestore errors
+            parentIdeaId: parentIdea?.id || editingIdea?.parentIdeaId || undefined,
             dynamicData,
             tags: [],
             status: status,
             ratings: editingIdea?.ratings || [],
             comments: editingIdea?.comments || [],
             attachments: attachments,
-            managerFeedback: editingIdea?.managerFeedback 
+            managerFeedback: editingIdea?.managerFeedback || undefined
         };
+        
+        // Remove keys that are undefined to please Firestore
+        const sanitizedIdea = JSON.parse(JSON.stringify(newIdea));
 
-        await db.saveIdea(newIdea);
+        await db.saveIdea(sanitizedIdea);
         setIsUploading(false);
         navigate('/dashboard');
     }
