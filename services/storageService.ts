@@ -256,9 +256,10 @@ export const uploadImageToFirebase = async (file: File): Promise<string> => {
 
 // 2. Google Drive for Attachments (PDFs, Docs) via App Script
 export const uploadToDrive = async (file: File): Promise<string> => {
-  // Check file size (2MB limit for App Script stability)
-  if (file.size > 2 * 1024 * 1024) {
-    throw new Error("File size exceeds 2MB limit. Please upload a smaller file.");
+  // STRICTER LIMIT: 1MB to prevent Google Apps Script "Utilities.newBlob" crash
+  const LIMIT_MB = 1;
+  if (file.size > LIMIT_MB * 1024 * 1024) {
+    throw new Error(`File size exceeds ${LIMIT_MB}MB limit. Please upload a smaller file or compress it.`);
   }
 
   try {
@@ -269,7 +270,6 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     const mimeType = file.type || "application/octet-stream";
 
     // Optimized Payload: Minimal data to prevent GAS from running out of memory/time
-    // We do NOT send 'file', 'data', and 'base64' all at once. Just one.
     const payload = {
       filename: fileName,
       mimeType: mimeType,
@@ -300,7 +300,12 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     }
 
     if (result.error || result.status === 'error') {
-        throw new Error(result.error || result.message || "Unknown server error");
+        let errorMsg = result.error || result.message || "Unknown server error";
+        // Map common Apps Script memory error to user friendly message
+        if (errorMsg.includes("newBlob") || errorMsg.includes("Utilities")) {
+             errorMsg = "Server memory limit exceeded. Please try a file smaller than 1MB.";
+        }
+        throw new Error(errorMsg);
     }
 
     const fileUrl = result.url || result.fileUrl || result.link || result.downloadUrl;
