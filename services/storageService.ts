@@ -1,13 +1,7 @@
-import { initializeApp } from 'firebase/app';
-import { 
-  initializeFirestore, getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, updateDoc, 
-  query, where 
-} from 'firebase/firestore';
-import { 
-  getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, 
-  onAuthStateChanged, User as FirebaseUser 
-} from 'firebase/auth';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+import 'firebase/compat/storage';
 import { User, Idea, AppSettings, UserRole, UserStatus, IdeaStatus, FormTemplate } from '../types';
 
 // --- Firebase Configuration ---
@@ -21,22 +15,26 @@ const firebaseConfig = (typeof window !== 'undefined' && (window as any).__fireb
   measurementId: "G-X5GVRLDBQQ"
 };
 
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase (Compat style)
+// We check .apps.length to avoid re-initialization errors during hot-reload
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
-// Initialize Firestore with settings to improve connectivity
-// We wrap in try-catch because in hot-reload environments, re-initializing throws an error
-let db: any;
+const app = firebase.app();
+const db = firebase.firestore();
+const auth = firebase.auth();
+const storage = firebase.storage();
+
+// Initialize Firestore settings
+// Force long polling to fix "Could not reach Cloud Firestore backend" in restrictive networks
 try {
-    db = initializeFirestore(app, {
+    db.settings({
         experimentalForceLongPolling: true, 
     });
 } catch (e) {
-    // If already initialized (e.g. multiple calls), get the existing instance
-    db = getFirestore(app);
+    // Settings might have been applied already, ignore error
 }
-
-const auth = getAuth(app);
-const storage = getStorage(app);
 
 // --- Google Drive Script ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbywVx70i2DXMf90cuMkE84Jn3rNlIr6dQJwXdoVx7l9kzzSXU-9uxn1MnrbWnJRRu6b/exec";
@@ -54,11 +52,11 @@ const DEFAULT_SETTINGS_ID = 'global_settings';
 // --- Auth Services ---
 
 export const subscribeToAuth = (callback: (user: User | null) => void) => {
-  return onAuthStateChanged(auth, async (firebaseUser) => {
+  return auth.onAuthStateChanged(async (firebaseUser) => {
     if (firebaseUser) {
       // Fetch extended user profile from Firestore
-      const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, firebaseUser.uid));
-      if (userDoc.exists()) {
+      const userDoc = await db.collection(COLLECTIONS.USERS).doc(firebaseUser.uid).get();
+      if (userDoc.exists) {
         callback(userDoc.data() as User);
       } else {
         // Fallback if doc missing (shouldn't happen in normal flow)
@@ -71,10 +69,12 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
 };
 
 export const loginUser = async (email: string, password: string): Promise<User> => {
-  const userCredential = await signInWithEmailAndPassword(auth, email, password);
-  const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userCredential.user.uid));
+  const userCredential = await auth.signInWithEmailAndPassword(email, password);
+  if (!userCredential.user) throw new Error('Login failed.');
+
+  const userDoc = await db.collection(COLLECTIONS.USERS).doc(userCredential.user.uid).get();
   
-  if (!userDoc.exists()) throw new Error('User profile not found.');
+  if (!userDoc.exists) throw new Error('User profile not found.');
   
   const user = userDoc.data() as User;
   if (user.status === UserStatus.PENDING) throw new Error('Account pending admin approval');
@@ -85,11 +85,11 @@ export const loginUser = async (email: string, password: string): Promise<User> 
 
 export const registerUser = async (userData: Omit<User, 'id' | 'status'>): Promise<User> => {
   // Check if username taken (manual check as Auth uses email)
-  const q = query(collection(db, COLLECTIONS.USERS), where("username", "==", userData.username));
-  const querySnapshot = await getDocs(q);
-  if (!querySnapshot.empty) throw new Error('Username taken');
+  const q = await db.collection(COLLECTIONS.USERS).where("username", "==", userData.username).get();
+  if (!q.empty) throw new Error('Username taken');
 
-  const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password || 'password');
+  const userCredential = await auth.createUserWithEmailAndPassword(userData.email, userData.password || 'password');
+  if (!userCredential.user) throw new Error('Registration failed.');
   
   // Auto-assign Admin role for specific email for bootstrapping
   const role = userData.email === 'admin@eprom.com' ? UserRole.ADMIN : UserRole.EMPLOYEE;
@@ -104,59 +104,59 @@ export const registerUser = async (userData: Omit<User, 'id' | 'status'>): Promi
     password: '' 
   };
 
-  await setDoc(doc(db, COLLECTIONS.USERS, newUser.id), newUser);
+  await db.collection(COLLECTIONS.USERS).doc(newUser.id).set(newUser);
   return newUser;
 };
 
 export const logoutUser = async () => {
-  await signOut(auth);
+  await auth.signOut();
 };
 
 export const getUserById = async (id: string): Promise<User | null> => {
-    const d = await getDoc(doc(db, COLLECTIONS.USERS, id));
-    return d.exists() ? d.data() as User : null;
+    const d = await db.collection(COLLECTIONS.USERS).doc(id).get();
+    return d.exists ? d.data() as User : null;
 };
 
 export const getUsers = async (): Promise<User[]> => {
-  const snapshot = await getDocs(collection(db, COLLECTIONS.USERS));
+  const snapshot = await db.collection(COLLECTIONS.USERS).get();
   return snapshot.docs.map(d => d.data() as User);
 };
 
 export const updateUserStatus = async (userId: string, status: UserStatus, role?: UserRole) => {
-  const ref = doc(db, COLLECTIONS.USERS, userId);
+  const ref = db.collection(COLLECTIONS.USERS).doc(userId);
   const data: any = { status };
   if (role) data.role = role;
-  await updateDoc(ref, data);
+  await ref.update(data);
 };
 
 export const updateUserRole = async (userId: string, role: UserRole) => {
-  await updateDoc(doc(db, COLLECTIONS.USERS, userId), { role });
+  await db.collection(COLLECTIONS.USERS).doc(userId).update({ role });
 };
 
 export const deleteUser = async (userId: string) => {
-  await deleteDoc(doc(db, COLLECTIONS.USERS, userId));
+  await db.collection(COLLECTIONS.USERS).doc(userId).delete();
 };
 
 // --- Idea Services ---
 
 export const getIdeas = async (): Promise<Idea[]> => {
-  const snapshot = await getDocs(collection(db, COLLECTIONS.IDEAS));
+  const snapshot = await db.collection(COLLECTIONS.IDEAS).get();
   return snapshot.docs.map(d => d.data() as Idea);
 };
 
 export const saveIdea = async (idea: Idea) => {
-  await setDoc(doc(db, COLLECTIONS.IDEAS, idea.id), idea);
+  await db.collection(COLLECTIONS.IDEAS).doc(idea.id).set(idea);
 };
 
 export const deleteIdea = async (id: string) => {
-  await deleteDoc(doc(db, COLLECTIONS.IDEAS, id));
+  await db.collection(COLLECTIONS.IDEAS).doc(id).delete();
 };
 
 // --- Settings Services ---
 
 export const getSettings = async (): Promise<AppSettings> => {
-  const d = await getDoc(doc(db, COLLECTIONS.SETTINGS, DEFAULT_SETTINGS_ID));
-  if (d.exists()) return d.data() as AppSettings;
+  const d = await db.collection(COLLECTIONS.SETTINGS).doc(DEFAULT_SETTINGS_ID).get();
+  if (d.exists) return d.data() as AppSettings;
   
   // Default fallback
   const defaults: AppSettings = {
@@ -166,18 +166,18 @@ export const getSettings = async (): Promise<AppSettings> => {
     categories: ['Cost Reduction', 'Safety Improvement', 'Process Optimization', 'Innovation', 'Sustainability']
   };
   // Save defaults to DB
-  await setDoc(doc(db, COLLECTIONS.SETTINGS, DEFAULT_SETTINGS_ID), defaults);
+  await db.collection(COLLECTIONS.SETTINGS).doc(DEFAULT_SETTINGS_ID).set(defaults);
   return defaults;
 };
 
 export const updateSettings = async (settings: AppSettings) => {
-  await setDoc(doc(db, COLLECTIONS.SETTINGS, DEFAULT_SETTINGS_ID), settings);
+  await db.collection(COLLECTIONS.SETTINGS).doc(DEFAULT_SETTINGS_ID).set(settings);
 };
 
 // --- Template Services ---
 
 export const getTemplates = async (): Promise<FormTemplate[]> => {
-  const snapshot = await getDocs(collection(db, COLLECTIONS.TEMPLATES));
+  const snapshot = await db.collection(COLLECTIONS.TEMPLATES).get();
   const templates = snapshot.docs.map(d => d.data() as FormTemplate);
   
   if (templates.length === 0) {
@@ -204,69 +204,23 @@ export const getTemplates = async (): Promise<FormTemplate[]> => {
           { id: 'tags', label: 'Tags/Keywords', type: 'text', required: false }
         ]
       };
-      await setDoc(doc(db, COLLECTIONS.TEMPLATES, defaultTemplate.id), defaultTemplate);
+      await db.collection(COLLECTIONS.TEMPLATES).doc(defaultTemplate.id).set(defaultTemplate);
       return [defaultTemplate];
   }
   return templates;
 };
 
 export const saveTemplate = async (template: FormTemplate) => {
-  await setDoc(doc(db, COLLECTIONS.TEMPLATES, template.id), template);
+  await db.collection(COLLECTIONS.TEMPLATES).doc(template.id).set(template);
 };
 
 export const deleteTemplate = async (id: string) => {
-  await deleteDoc(doc(db, COLLECTIONS.TEMPLATES, id));
+  await db.collection(COLLECTIONS.TEMPLATES).doc(id).delete();
 };
 
 // --- File Services ---
 
-// 1. Firebase Storage for Images (Cover Images, Logos)
-export const uploadImageToFirebase = async (file: File): Promise<string> => {
-    // Basic validation
-    if (!file.type.startsWith('image/')) {
-        throw new Error('Only image files are allowed for this field.');
-    }
-
-    // PRE-CHECK: If we are on GitHub Pages or a non-standard domain, Firebase Storage often blocks via CORS.
-    // We preemptively skip to Drive to avoid the ugly red console error.
-    if (window.location.hostname.includes('github.io') || window.location.hostname.includes('web.app')) {
-        console.log("Environment detected (GitHub/Hosted): Defaulting to Drive uploader to avoid CORS issues.");
-        try {
-            const driveUrl = await uploadToDrive(file);
-            if (driveUrl.includes('export=download')) {
-                return driveUrl.replace('export=download', 'export=view');
-            }
-            return driveUrl;
-        } catch (driveError: any) {
-            throw new Error(`Drive Upload failed: ${driveError.message}`);
-        }
-    }
-    
-    try {
-      // Create a unique path: images/{timestamp}_{filename}
-      const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
-      
-      // Upload
-      const snapshot = await uploadBytes(storageRef, file);
-      
-      // Get URL
-      const url = await getDownloadURL(snapshot.ref);
-      return url;
-    } catch (error: any) {
-      console.warn("Firebase Storage Upload failed. Attempting fallback to Drive.", error);
-      try {
-        const driveUrl = await uploadToDrive(file);
-        if (driveUrl.includes('export=download')) {
-            return driveUrl.replace('export=download', 'export=view');
-        }
-        return driveUrl;
-      } catch (driveError: any) {
-         throw new Error(`Upload failed: ${error.message || "Firebase Error"} | Fallback failed: ${driveError.message}`);
-      }
-    }
-};
-
-// 2. Google Drive for Attachments (PDFs, Docs) via App Script
+// Helper to convert file to Base64
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -276,6 +230,30 @@ export const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// 1. Image Upload Strategy (Direct Base64 Storage)
+// This avoids CORS issues on GitHub Pages by storing the image string directly in Firestore.
+export const uploadImageToFirebase = async (file: File): Promise<string> => {
+    // Basic validation
+    if (!file.type.startsWith('image/')) {
+        throw new Error('Only image files are allowed for this field.');
+    }
+
+    // Limit to 500KB to respect Firestore doc limits (1MB)
+    if (file.size > 500 * 1024) {
+        throw new Error("Image is too large for the database. Please use an image under 500KB.");
+    }
+
+    try {
+        console.log("Converting image to Base64...");
+        const base64String = await fileToBase64(file);
+        return base64String;
+    } catch (error: any) {
+        console.error("Image encoding failed:", error);
+        throw new Error("Failed to process image file.");
+    }
+};
+
+// 2. Google Drive for Attachments (PDFs, Docs) via App Script
 export const uploadToDrive = async (file: File): Promise<string> => {
   // Check file size (5MB limit for App Script)
   if (file.size > 5 * 1024 * 1024) {
@@ -335,6 +313,6 @@ export const uploadToDrive = async (file: File): Promise<string> => {
     return fileUrl;
   } catch (error: any) {
     console.error("Drive Upload failed", error);
-    throw new Error(error.message || "Upload failed");
+    throw new Error(error.message || "Upload failed. Please try a smaller file or checking internet connection.");
   }
 };
