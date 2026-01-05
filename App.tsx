@@ -1028,7 +1028,10 @@ const IdeaFormPage = () => {
         const fetch = async () => {
             const t = await db.getTemplates();
             setTemplates(t);
-            if (!editingIdea && t.length > 0) setTemplateId(t[0].id);
+            // Default to first template if creating new and no template selected yet
+            if (!editingIdea && t.length > 0) {
+                 setTemplateId(current => current || t[0].id);
+            }
             if (settings) setCategories(settings.categories);
         };
         fetch();
@@ -1170,6 +1173,27 @@ const IdeaFormPage = () => {
             <form onSubmit={handleSubmit} className="space-y-8">
                 <Card className="p-8 border-none shadow-lg">
                     <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-100 pb-2">01 // Core Intelligence</h3>
+                    
+                    {/* Template Selection */}
+                    {!editingIdea && !parentIdea && templates.length > 0 && (
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">Select Protocol Template</label>
+                            <select 
+                                value={templateId} 
+                                onChange={(e) => setTemplateId(e.target.value)}
+                                className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:border-eprom-blue focus:ring-1 focus:ring-eprom-blue transition-all input-base"
+                            >
+                                {templates.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                            {currentTemplate && (
+                                <p className="text-xs text-slate-500 mt-2 bg-slate-50 p-2 rounded border border-slate-100">
+                                    <span className="font-bold">Template Description:</span> {currentTemplate.description}
+                                </p>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                         <Input label="Protocol Title" value={title} onChange={e => setTitle(e.target.value)} required placeholder="e.g. Flare Gas Recovery" />
