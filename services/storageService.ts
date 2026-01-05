@@ -22,7 +22,9 @@ if (!firebase.apps.length) {
   // Initialize settings once immediately after app creation
   try {
     firebase.firestore().settings({
-        experimentalForceLongPolling: true, 
+        experimentalForceLongPolling: true,
+        // @ts-ignore - 'merge' is sometimes needed to suppress warnings in specific environments
+        merge: true 
     });
   } catch (e) {
     // Ignore if settings already applied
@@ -254,9 +256,9 @@ export const uploadImageToFirebase = async (file: File): Promise<string> => {
 
 // 2. Google Drive for Attachments (PDFs, Docs) via App Script
 export const uploadToDrive = async (file: File): Promise<string> => {
-  // Check file size (5MB limit for App Script)
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error("File size exceeds 5MB limit. Please upload a smaller file.");
+  // Check file size (2MB limit for App Script stability)
+  if (file.size > 2 * 1024 * 1024) {
+    throw new Error("File size exceeds 2MB limit. Please upload a smaller file.");
   }
 
   try {
