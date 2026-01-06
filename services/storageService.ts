@@ -58,9 +58,17 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
       // Fetch extended user profile from Firestore
       const userDoc = await db.collection(COLLECTIONS.USERS).doc(firebaseUser.uid).get();
       if (userDoc.exists) {
-        callback(userDoc.data() as User);
+        const userData = userDoc.data() as User;
+        
+        // Security Check: Even if Firebase session exists, check status again
+        // This handles cases where an admin rejects a user while they are logged in
+        if (userData.status === UserStatus.PENDING || userData.status === UserStatus.REJECTED) {
+            await auth.signOut();
+            callback(null);
+        } else {
+            callback(userData);
+        }
       } else {
-        // Fallback if doc missing (shouldn't happen in normal flow)
         callback(null);
       }
     } else {
@@ -69,40 +77,71 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
   });
 };
 
-export const loginUser = async (email: string, password: string): Promise<User> => {
-  const userCredential = await auth.signInWithEmailAndPassword(email, password);
+export const loginUser = async (username: string, password: string): Promise<User> => {
+  // 1. Lookup Email by Username
+  const userQuery = await db.collection(COLLECTIONS.USERS)
+    .where('username', '==', username)
+    .limit(1)
+    .get();
+
+  if (userQuery.empty) {
+    throw new Error('Username not found. Please register first.');
+  }
+
+  const userMeta = userQuery.docs[0].data() as User;
+  
+  // 2. Authenticate with Email/Password
+  let userCredential;
+  try {
+    userCredential = await auth.signInWithEmailAndPassword(userMeta.email, password);
+  } catch (err: any) {
+    throw new Error('Incorrect password.');
+  }
+
   if (!userCredential.user) throw new Error('Login failed.');
 
+  // 3. Get Fresh User Data & Check Status
   const userDoc = await db.collection(COLLECTIONS.USERS).doc(userCredential.user.uid).get();
   
-  if (!userDoc.exists) throw new Error('User profile not found.');
+  if (!userDoc.exists) throw new Error('User profile corrupted.');
   
   const user = userDoc.data() as User;
-  if (user.status === UserStatus.PENDING) throw new Error('Account pending admin approval');
-  if (user.status === UserStatus.REJECTED) throw new Error('Account rejected');
+
+  // 4. Strict Approval Gate
+  if (user.status === UserStatus.PENDING) {
+    await auth.signOut(); // Force logout so they don't persist in session
+    throw new Error('Account is pending Administrator approval. Access denied.');
+  }
+
+  if (user.status === UserStatus.REJECTED) {
+    await auth.signOut();
+    throw new Error('Account has been deactivated. Contact Admin.');
+  }
   
   return user;
 };
 
 export const registerUser = async (userData: Omit<User, 'id' | 'status'>): Promise<User> => {
-  // Check if username taken (manual check as Auth uses email)
-  const q = await db.collection(COLLECTIONS.USERS).where("username", "==", userData.username).get();
-  if (!q.empty) throw new Error('Username taken');
+  // Check if username taken
+  const qUsername = await db.collection(COLLECTIONS.USERS).where("username", "==", userData.username).get();
+  if (!qUsername.empty) throw new Error('Username is already taken.');
 
+  // Create Auth User
   const userCredential = await auth.createUserWithEmailAndPassword(userData.email, userData.password || 'password');
   if (!userCredential.user) throw new Error('Registration failed.');
   
-  // Auto-assign Admin role for specific email for bootstrapping
-  const role = userData.email === 'admin@eprom.com' ? UserRole.ADMIN : UserRole.EMPLOYEE;
-  const status = userData.email === 'admin@eprom.com' ? UserStatus.ACTIVE : UserStatus.PENDING;
+  // Auto-assign Admin role for specific email for bootstrapping ONLY
+  const isAdmin = userData.email === 'admin@eprom.com';
+  const role = isAdmin ? UserRole.ADMIN : UserRole.EMPLOYEE;
+  // ONLY Admin is active by default. Everyone else is PENDING.
+  const status = isAdmin ? UserStatus.ACTIVE : UserStatus.PENDING;
 
   const newUser: User = {
     ...userData,
     id: userCredential.user.uid,
     role,
     status,
-    // Don't save password in Firestore
-    password: '' 
+    password: '' // Don't save password in Firestore
   };
 
   await db.collection(COLLECTIONS.USERS).doc(newUser.id).set(newUser);

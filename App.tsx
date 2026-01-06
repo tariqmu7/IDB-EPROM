@@ -168,6 +168,25 @@ const Navbar = () => {
   );
 };
 
+// --- Protected Route Component ---
+// Strictly enforces authentication. If no user, redirect to auth.
+const ProtectedRoute: React.FC<{ children: React.ReactElement }> = ({ children }) => {
+    const { user, authLoading } = useAppContext();
+    const location = useLocation();
+
+    if (authLoading) {
+        return <div className="min-h-screen flex items-center justify-center text-slate-400">Loading Access...</div>;
+    }
+
+    if (!user) {
+        // Redirect them to the /auth page, but save the current location they were
+        // trying to go to when they were redirected.
+        return <Navigate to="/auth" state={{ from: location }} replace />;
+    }
+
+    return children;
+};
+
 // --- AI Components ---
 
 const AIChat = () => {
@@ -334,6 +353,7 @@ const AppProvider: React.FC<{ children?: React.ReactNode }> = ({ children }) => 
   }, []);
 
   const login = async (u: string, p: string): Promise<UserRole> => {
+    // Note: u here is Username, not Email
     const loggedUser = await db.loginUser(u, p);
     setUser(loggedUser);
     return loggedUser.role;
@@ -948,7 +968,8 @@ const AuthPage = () => {
     setIsLoading(true);
     try {
       if (isLogin) {
-        const role = await login(formData.email, formData.password); // Changed to email
+        // Updated to use username instead of email for login
+        const role = await login(formData.username, formData.password); 
         if (role === UserRole.ADMIN) navigate('/admin');
         else navigate('/dashboard');
       } else {
@@ -959,16 +980,15 @@ const AuthPage = () => {
             department: formData.department,
             role: UserRole.EMPLOYEE
         });
-        alert("Registration successful. Please login.");
+        alert("Registration successful. Please login to check approval status.");
         setIsLogin(true);
+        // Reset form except email potentially? Better to clear password
+        setFormData(prev => ({...prev, password: ''}));
       }
     } catch (err: any) {
       // Improved error handling
       let msg = err.message;
-      // Common Firebase error codes
-      if (msg.includes('auth/invalid-credential') || msg.includes('auth/user-not-found') || msg.includes('INVALID_LOGIN_CREDENTIALS')) {
-        msg = "Invalid credentials. If you haven't registered yet, please switch to the 'Register' tab to create your account.";
-      } else if (msg.includes('auth/email-already-in-use')) {
+      if (msg.includes('auth/email-already-in-use')) {
         msg = "Email already in use. Please login.";
       } else if (msg.includes('auth/weak-password')) {
         msg = "Password should be at least 6 characters.";
@@ -985,15 +1005,23 @@ const AuthPage = () => {
         <h2 className="text-2xl font-bold mb-6 text-center">{isLogin ? 'Login' : 'Register'}</h2>
         {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm font-medium">{error}</div>}
         <form onSubmit={handleSubmit}>
-          {!isLogin && <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />}
-          <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+          {/* Username is required for both Login and Register now */}
+          <Input label="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />
+          
+          {/* Email is only required for Registration */}
+          {!isLogin && (
+             <Input label="Email" type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+          )}
+          
           <Input label="Password" type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} required />
+          
           {!isLogin && (
             <Select label="Department" options={['Operations', 'Safety', 'Engineering', 'IT', 'HR']} value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required />
           )}
+          
           <Button type="submit" disabled={isLoading} className="w-full mt-4">{isLoading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}</Button>
         </form>
-        <p className="mt-4 text-center text-sm text-slate-500 cursor-pointer hover:text-eprom-blue" onClick={() => { setIsLogin(!isLogin); setError(''); }}>
+        <p className="mt-4 text-center text-sm text-slate-500 cursor-pointer hover:text-eprom-blue" onClick={() => { setIsLogin(!isLogin); setError(''); setFormData({ username: '', password: '', email: '', department: 'Engineering' }); }}>
           {isLogin ? "Need an account? Register" : "Already have an account? Login"}
         </p>
       </Card>
@@ -1548,12 +1576,16 @@ const App = () => {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/auth" element={<AuthPage />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/submit" element={<IdeaFormPage />} />
+            {/* Protected Routes Wrapper */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/submit" element={<ProtectedRoute><IdeaFormPage /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+            <Route path="/collaboration" element={<ProtectedRoute><CollaborationHub /></ProtectedRoute>} />
+            
+            {/* Shared Idea Page handles its own auth logic for public/private, but standard access is checked inside component */}
             <Route path="/view/:id" element={<SharedIdeaPage />} />
-            <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/collaboration" element={<CollaborationHub />} />
-            <Route path="/search" element={<SearchPage />} />
+            
+            <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
